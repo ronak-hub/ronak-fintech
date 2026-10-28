@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <rect width="128" height="128" rx="32" fill="#090909"/>
+  <circle cx="64" cy="64" r="52" fill="#140606" stroke="#E03A2E" stroke-width="10"/>
+  <path d="M78 28 L56 70 L74 66 L54 108" fill="none" stroke="#FF4D4D" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M55 36 L46 68 L28 80" fill="none" stroke="#FF4D4D" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+  <text x="64" y="106" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="18" letter-spacing="1" fill="#F0B3A9" font-weight="900">VAULTIC</text>
+</svg>

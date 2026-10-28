@@ -1,0 +1,45 @@
+# IDE and editor configuration
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+
+# Local Docker overrides
+docker-compose.override.yml
+
+# Build artifacts
+/.next/
+/out/
+/build
+
+# Frontend artifacts
+/finitch-frontend/node_modules
+/finitch-frontend/.next
+/finitch-frontend/out
+/finitch-frontend/build
+/finitch-frontend/tsconfig.tsbuildinfo
+
+# Python artifacts
+**/__pycache__/
+**/*.py[cod]
+**/*.pyo
+**/*.pyc
+**/*.sqlite3
+**/*.db
+
+# Logs and temporary output
+*.log
+**/*.log
+**/*.err.log
+
+# Local environment files
+.env*.local
+.env
+
+# Temporary or stale folders
+/Landing/
+/VAULTIC.worktrees/

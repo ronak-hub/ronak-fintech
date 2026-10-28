@@ -1,0 +1,302 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-vaultic-black: #080B12;
+  --color-vaultic-foreground: #F8FAFC;
+  --color-vaultic-cream: #FCF1E6;
+  --color-vaultic-surface: #121A2A;
+  --color-vaultic-surface-soft: #182235;
+  --color-vaultic-elevated: #1E2A3E;
+  --color-vaultic-charcoal: #0E1520;
+  --color-vaultic-ink: #111927;
+  --color-vaultic-orange: #F59E0B;
+  --color-vaultic-golden: #F5C26B;
+  --color-vaultic-mint: #2DD4A4;
+  --color-vaultic-cyan: #4CC9F0;
+  --color-vaultic-sakura: #F7C7D4;
+  --color-vaultic-indigo: #6366F1;
+  --color-vaultic-rose: #FB7185;
+  --color-vaultic-muted: #AAB6CF;
+  --color-vaultic-slate: #8B98B0;
+  --color-vaultic-border: #2A3548;
+  --color-vaultic-error: #F87171;
+  --color-vaultic-success: #22C55E;
+  --color-vaultic-warning: #FBBF24;
+
+  --font-display: "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+:root {
+  --background: #080B12;
+  --foreground: #F8FAFC;
+  --surface: #121A2A;
+  --surface-soft: #182235;
+  --elevated: #1E2A3E;
+  --surface-rgb: 18, 26, 42;
+  --background-rgb: 8, 11, 18;
+  --border: rgba(216,223,234,0.12);
+  --accent: #F59E0B;
+  --accent-rgb: 245, 158, 11;
+  --accent-soft: rgba(var(--accent-rgb),0.18);
+  --accent-soft-muted: rgba(var(--accent-rgb),0.12);
+  --accent-soft-medium: rgba(var(--accent-rgb),0.24);
+  --accent-soft-strong: rgba(var(--accent-rgb),0.4);
+  --accent-soft-bright: rgba(var(--accent-rgb),0.55);
+  --accent-soft-xstrong: rgba(var(--accent-rgb),0.7);
+  --foreground-rgb: 248, 250, 252;
+  --mint: #2DD4A4;
+  --mint-rgb: 45, 212, 164;
+  --mint-soft: rgba(var(--mint-rgb),0.18);
+  --cyan: #4CC9F0;
+  --cyan-rgb: 76, 201, 240;
+  --warning: #FBBF24;
+  --error: #F87171;
+  --muted: #AAB6CF;
+  --sakura: #F7C7D4;
+  --sakura-rgb: 247, 199, 212;
+  --ink: #111927;
+  --ink-rgb: 17, 25, 39;
+  --golden: #F5C26B;
+  --golden-rgb: 245, 194, 107;
+  --cream: #FCF1E6;
+}
+
+html {
+  scroll-padding-top: 5.5rem;
+}
+
+section {
+  display: block;
+  position: relative;
+  width: 100%;
+  clear: both;
+}
+
+.vaultic-page section + section {
+  margin-top: 3rem;
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgba(var(--sakura-rgb),0.18), transparent 22rem),
+    radial-gradient(circle at bottom right, rgba(var(--golden-rgb),0.12), transparent 28rem),
+    linear-gradient(180deg, rgba(8, 11, 18, 0.96), rgba(18, 26, 42, 0.98) 38rem),
+    var(--background);
+  color: var(--foreground);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a {
+  min-height: 44px;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid rgba(var(--accent-rgb), 0.8);
+  outline-offset: 3px;
+}
+
+.vaultic-page {
+  min-height: 100vh;
+  background:
+    linear-gradient(180deg, rgba(18, 26, 42, 0.96), rgba(8, 11, 18, 1) 42rem),
+    var(--background);
+  color: var(--foreground);
+}
+
+.vaultic-panel {
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(30, 42, 62, 0.82), rgba(18, 26, 42, 0.94));
+  box-shadow: 0 24px 80px -44px rgba(0, 0, 0, 0.9);
+}
+
+.vaultic-input {
+  border: 1px solid var(--border);
+  background: rgba(8, 11, 18, 0.72);
+  color: var(--foreground);
+  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.vaultic-input::placeholder {
+  color: rgba(170, 182, 207, 0.72);
+}
+
+.vaultic-input:focus {
+  border-color: rgba(var(--accent-rgb), 0.72);
+  background: rgba(8, 11, 18, 0.92);
+  box-shadow: 0 0 0 4px rgba(var(--accent-rgb), 0.1);
+}
+
+select.vaultic-input,
+select {
+  color: var(--foreground);
+  background-color: rgba(8, 11, 18, 0.72);
+}
+
+select.vaultic-select {
+  cursor: pointer;
+  padding-right: 2.5rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23FBBF24' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1rem;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+select.vaultic-input option,
+select option {
+  background-color: var(--surface);
+  color: var(--foreground);
+}
+
+.vaultic-stat-card {
+  border: 1px solid var(--border);
+  background: linear-gradient(145deg, rgba(30, 42, 62, 0.88), rgba(18, 26, 42, 0.96));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 20px 50px -35px rgba(0, 0, 0, 0.75);
+}
+
+.vaultic-accent-glow {
+  box-shadow: 0 0 40px rgba(var(--accent-rgb), 0.18);
+}
+
+.vaultic-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem;
+  border: 1px solid rgba(var(--accent-rgb), 0.55);
+  background: linear-gradient(135deg, #FBBF24, var(--accent));
+  color: #111827;
+  font-weight: 900;
+  transition: transform 160ms ease, filter 160ms ease, box-shadow 160ms ease;
+  box-shadow: 0 16px 42px -24px rgba(var(--accent-rgb), 0.95);
+}
+
+.vaultic-btn-primary:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+.vaultic-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem;
+  border: 1px solid var(--border);
+  background: rgba(30, 42, 62, 0.72);
+  color: var(--foreground);
+  font-weight: 800;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.vaultic-btn-secondary:hover {
+  border-color: rgba(var(--cyan-rgb), 0.42);
+  background: rgba(30, 42, 62, 0.96);
+}
+
+.vaultic-hot-button {
+  color: var(--accent);
+  background-color: rgba(var(--accent-rgb), 0.14);
+  border-color: rgba(var(--accent-rgb), 0.32);
+}
+
+.vaultic-hot-button:hover {
+  background-color: rgba(var(--accent-rgb), 0.22);
+}
+
+.vaultic-alert-error {
+  background: rgba(248, 113, 113, 0.14);
+  border-color: rgba(248, 113, 113, 0.28);
+  color: #FCA5A5;
+}
+
+.vaultic-alert-error p,
+.vaultic-alert-error span {
+  color: inherit;
+}
+
+.vaultic-alert-success {
+  background: rgba(34, 197, 94, 0.14);
+  border-color: rgba(34, 197, 94, 0.28);
+  color: #6EE7B7;
+}
+
+.vaultic-alert-success p,
+.vaultic-alert-success span {
+  color: inherit;
+}
+
+.vaultic-chip {
+  border: 1px solid var(--border);
+  background: rgba(216, 223, 234, 0.06);
+  color: var(--muted);
+}
+
+/* Institutional Slider Styling */
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 24px;
+  height: 24px;
+  background: var(--accent);
+  border: 4px solid var(--background);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 15px rgba(var(--accent-rgb),0.35);
+}
+
+input[type='range']::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  background: var(--accent);
+  border: 4px solid var(--background);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+/* Perspective Engine for 3D Cards */
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(var(--mint-rgb),0.35);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--accent-rgb),0.55);
+}
