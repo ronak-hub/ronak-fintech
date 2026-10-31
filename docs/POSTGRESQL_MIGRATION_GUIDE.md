@@ -36,3 +36,12 @@ Start the backend and frontend:
 ```bash
 docker compose up --build
 ```
+
+## Render preview database
+
+The root `render.yaml` Blueprint creates a free PostgreSQL database in Oregon
+and injects its private connection string into the backend as `DATABASE_URL`.
+Keep the database and backend in the same region. Free database service limits
+and retention are intended for previews only; use a paid managed database with
+backups enabled before storing production data. Do not copy the connection
+string into source control.

@@ -176,15 +176,16 @@ VAULTIC/
 
 ### Public deployment (Vercel + Render)
 
-This app is prepared for a public production deployment with a separate frontend and backend:
+This app is prepared for a public deployment with a separate frontend and backend:
 
 - Frontend: Vercel (Next.js)
 - Backend: Render (FastAPI)
 - Database: Render Postgres or any managed PostgreSQL service
 
-1. Deploy the backend on Render using the included `render.yaml` file.
+1. Deploy the backend and PostgreSQL database on Render using the included
+   `render.yaml` Blueprint. It creates a free Oregon database for preview use;
+   free-tier limits and retention make it unsuitable for production data.
 2. Set these environment variables on Render:
-   - `DATABASE_URL`
    - `SECRET_KEY` (Render-generated, unique and at least 32 characters)
    - `VAULTIC_WEBHOOK_SECRET`
    - `CORS_ORIGINS` set to the exact HTTPS Vercel origin
@@ -194,7 +195,8 @@ This app is prepared for a public production deployment with a separate frontend
      `GOOGLE_REDIRECT_URI` set to the exact HTTPS backend callback URL registered
      in Google Cloud Console (`https://your-backend-url.onrender.com/auth/google/callback`)
    - Optional Gemini enrichment: `GOOGLE_API_KEY` (Wealth Audit sends SMS text only when a user explicitly opts in)
-3. Deploy the frontend on Vercel from the `finitch-frontend` folder.
+3. Deploy the frontend on Vercel from the `finitch-frontend` folder. Set the
+   project root directory to `finitch-frontend`.
 4. In Vercel, set:
    - `NEXT_PUBLIC_API_BASE_URL=https://your-backend-url.onrender.com`
    - Firebase web config is currently informational only; Firebase Auth, push notifications, and Storage are not integrated

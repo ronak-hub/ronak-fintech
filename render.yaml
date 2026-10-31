@@ -12,7 +12,9 @@ services:
       - key: PYTHON_VERSION
         value: 3.12.10
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: vaultic-postgres
+          property: connectionString
       - key: SECRET_KEY
         generateValue: true
       - key: VAULTIC_WEBHOOK_SECRET
@@ -43,3 +45,10 @@ services:
         value: 1440
       - key: API_V1_PREFIX
         value: /api/v1
+
+databases:
+  - name: vaultic-postgres
+    databaseName: vaultic_db
+    user: vaultic_user
+    plan: free
+    region: oregon
