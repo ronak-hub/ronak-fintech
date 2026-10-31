@@ -77,6 +77,16 @@ def test_production_settings_reject_sqlite_and_wildcard_cors():
         _ = wildcard_settings.cors_origins
 
 
+def test_google_redirect_uri_trims_surrounding_whitespace():
+    settings = Settings(
+        GOOGLE_REDIRECT_URI=" \nhttps://vaultic.example/auth/google/callback\n "
+    )
+
+    assert settings.GOOGLE_REDIRECT_URI == (
+        "https://vaultic.example/auth/google/callback"
+    )
+
+
 def test_short_existing_passwords_remain_usable_for_login(client):
     with Session(engine) as session:
         user = User(

@@ -3,6 +3,7 @@
 import json
 from urllib.parse import urlparse
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEVELOPMENT_SECRET = "vaultic-local-development-secret-not-for-production"
@@ -53,6 +54,11 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
     API_TITLE: str = "Vaultic - Autonomous Decision Intelligence"
     ENVIRONMENT: str = "development"
+
+    @field_validator("GOOGLE_REDIRECT_URI")
+    @classmethod
+    def normalize_google_redirect_uri(cls, value: str) -> str:
+        return value.strip()
 
     @property
     def is_production(self) -> bool:
