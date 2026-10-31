@@ -110,6 +110,7 @@ export default function VaulticDashboard() {
     const streakStatus = pulse?.streak_data?.status ?? (currentStreak > 0 ? 'ON FIRE' : 'REBOOTING');
 
     const checkStatus = useCallback(async () => {
+        await Promise.resolve();
         const token = getAuthToken();
         if (!token) {
             setIsLoading(false);
@@ -182,7 +183,8 @@ export default function VaulticDashboard() {
     const isWizardPreview = Boolean(searchParams?.get('wizardStep'));
 
     useEffect(() => {
-        void checkStatus();
+        const timeoutId = setTimeout(() => void checkStatus(), 0);
+        return () => clearTimeout(timeoutId);
     }, [checkStatus]);
 
     useEffect(() => {

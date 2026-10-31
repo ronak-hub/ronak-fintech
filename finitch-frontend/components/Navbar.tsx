@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { clearAuthToken, getAuthToken } from "@/lib/cookies";
 import { shouldShowNavbar, DASHBOARD_NAV_LINKS } from "@/lib/routes";
 import { LayoutDashboard, LogIn, LogOut, Home, Menu, X } from "lucide-react";
+import { useIsClient } from "@/useIsClient";
 
 const landingLinks = [
   { href: "#features", label: "Features" },
@@ -17,19 +18,11 @@ const landingLinks = [
 ];
 
 export default function Navbar() {
-  const [mounted, setMounted] = useState(false);
+  const mounted = useIsClient();
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname() ?? "";
   const router = useRouter();
   const hasSession = Boolean(getAuthToken());
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [pathname]);
 
   if (!mounted) {
     return (

@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { getAuthToken } from '@/lib/cookies';
+import { useIsClient } from '@/useIsClient';
 
 interface PulseModuleData {
   overall_health_score?: number;
@@ -12,11 +13,12 @@ interface PulseModuleData {
 }
 
 export default function PulseModule() {
-  const [mounted, setMounted] = useState(false);
+  const mounted = useIsClient();
   const [data, setData] = useState<PulseModuleData | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchPulse = async () => {
+    await Promise.resolve();
     try {
       const token = getAuthToken();
       if (!token) {
@@ -56,10 +58,12 @@ export default function PulseModule() {
   };
 
   useEffect(() => {
-    setMounted(true);
-    fetchPulse();
-    const interval = setInterval(fetchPulse, 30000);
-    return () => clearInterval(interval);
+    const timeoutId = setTimeout(() => void fetchPulse(), 0);
+    const interval = setInterval(() => void fetchPulse(), 30000);
+    return () => {
+      clearTimeout(timeoutId);
+      clearInterval(interval);
+    };
   }, []);
 
   if (!mounted || loading) {

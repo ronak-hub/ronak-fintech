@@ -70,6 +70,7 @@ export default function NeuralLeaksPage() {
   }, [transactions, monthlyImpact]);
 
   const fetchLeaks = useCallback(async () => {
+    await Promise.resolve();
     try {
       const token = getAuthToken();
       if (!token) {
@@ -107,7 +108,8 @@ export default function NeuralLeaksPage() {
   }, [router]);
 
   useEffect(() => {
-    void fetchLeaks();
+    const timeoutId = setTimeout(() => void fetchLeaks(), 0);
+    return () => clearTimeout(timeoutId);
   }, [fetchLeaks]);
 
   if (loading) return <div className="min-h-screen bg-vaultic-black flex items-center justify-center text-vaultic-muted font-mono text-xs uppercase tracking-widest">Scanning Friction Vectors...</div>;

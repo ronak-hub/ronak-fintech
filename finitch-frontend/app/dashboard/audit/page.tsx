@@ -408,14 +408,18 @@ export default function WealthAuditPage() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    try {
-      const storedIncentives = window.localStorage.getItem('vaulticAuditIncentives');
-      if (storedIncentives) {
-        setIncentives(JSON.parse(storedIncentives));
+    const loadIncentives = async () => {
+      await Promise.resolve();
+      try {
+        const storedIncentives = window.localStorage.getItem('vaulticAuditIncentives');
+        if (storedIncentives) {
+          setIncentives(JSON.parse(storedIncentives));
+        }
+      } catch {
+        setIncentives([]);
       }
-    } catch {
-      setIncentives([]);
-    }
+    };
+    void loadIncentives();
   }, []);
 
   useEffect(() => {

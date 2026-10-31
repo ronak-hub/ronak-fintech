@@ -202,7 +202,7 @@ export default function DNACalibrator({ onComplete, initialStep }: Readonly<DNAC
         if (step === 2 && expenses.length === 0) return;
 
         if (step === 1 && expenses.length === 0) {
-            setExpenses([{ id: Date.now().toString(), amount: '', category: 'Rent' }]);
+            setExpenses([{ id: 'default-rent', amount: '', category: 'Rent' }]);
         }
 
         if (step < 3) {

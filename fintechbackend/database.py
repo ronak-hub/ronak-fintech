@@ -26,9 +26,3 @@ def get_session():
 if __name__ == "__main__":
     create_db_and_tables()
     print("✅ Unified Database Initialized: finova_core.db")
-
-
-
-
-
-    the landing page has to many errors and its not eye catchy as well we need to correct language we need proper navbars etc on the landing page whcih properly defines the vaultic app https://scrollnhire.vercel.app/  this kind of style like css etc  and 3d graphs working landing page login buttons etc 

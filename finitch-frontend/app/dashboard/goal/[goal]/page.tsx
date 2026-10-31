@@ -323,19 +323,16 @@ export default function GoalDetailPage() {
   const travelMonthsToSave = effectiveSavingsAmount > 0 ? Math.ceil(effectiveTravelBudget / effectiveSavingsAmount) : 0;
   const travelGoalProgress = effectiveTravelBudget > 0 ? Math.min(100, Math.round((effectiveSavingsAmount * 12 * 100) / effectiveTravelBudget)) : 0;
 
-  const travelGraphData = useMemo(() => {
-    const months = 6;
-    const base = Math.max(effectiveSavingsAmount, Math.round(monthlyIncome * 0.2));
-    return Array.from({ length: months }, (_, index) => {
-      const saved = base * (index + 1);
-      return {
-        name: `M${index + 1}`,
-        saved,
-        needed: effectiveTravelBudget,
-        percent: effectiveTravelBudget > 0 ? Math.min(100, Math.round((saved / effectiveTravelBudget) * 100)) : 0,
-      };
-    });
-  }, [effectiveTravelBudget, effectiveSavingsAmount, monthlyIncome]);
+  const travelBase = Math.max(effectiveSavingsAmount, Math.round(monthlyIncome * 0.2));
+  const travelGraphData = Array.from({ length: 6 }, (_, index) => {
+    const saved = travelBase * (index + 1);
+    return {
+      name: `M${index + 1}`,
+      saved,
+      needed: effectiveTravelBudget,
+      percent: effectiveTravelBudget > 0 ? Math.min(100, Math.round((saved / effectiveTravelBudget) * 100)) : 0,
+    };
+  });
 
   const travelAllocation = [
     { name: 'Flights', value: effectiveDestination.flightCost, fill: '#F59E0B' },
@@ -447,14 +444,11 @@ export default function GoalDetailPage() {
     const periodExpenses = chartMode === 'monthly' ? fixedExpenses : fixedExpenses * 12;
     const periodSavings = chartMode === 'monthly' ? monthlyTarget : monthlyTarget * 12;
 
-    let cumulativeIncome = 0;
-    let cumulativeExpenses = 0;
-    let cumulativeSavings = 0;
-
     return Array.from({ length: months }, (_, index) => {
-      cumulativeIncome += periodIncome;
-      cumulativeExpenses += periodExpenses;
-      cumulativeSavings += periodSavings;
+      const periodCount = index + 1;
+      const cumulativeIncome = periodIncome * periodCount;
+      const cumulativeExpenses = periodExpenses * periodCount;
+      const cumulativeSavings = periodSavings * periodCount;
       const pointName = chartMode === 'monthly' ? `M${index + 1}` : `Y${index + 1}`;
       return {
         name: pointName,

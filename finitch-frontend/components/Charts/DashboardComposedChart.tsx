@@ -4,7 +4,21 @@ import React, { useEffect, useMemo, useState } from 'react';
 import * as Recharts from 'recharts';
 import { getEffectiveSavingsAmount, readStoredWizardData } from '@/lib/finance';
 
-const COLORS = ['#F59E0B', '#22C55E', '#38BDF8', '#A78BFA', '#F97316'];
+type DnaData = {
+  monthly_income?: number | string;
+  fixed_expenses?: number | string;
+  savings_amount?: number | string;
+  target_savings_rate?: number | string;
+};
+
+function isDnaData(value: unknown): value is DnaData {
+  if (typeof value !== 'object' || value === null) return false;
+
+  return ['monthly_income', 'fixed_expenses', 'savings_amount', 'target_savings_rate'].every((key) => {
+    const field = (value as Record<string, unknown>)[key];
+    return field === undefined || typeof field === 'number' || typeof field === 'string';
+  });
+}
 
 const formatCurrency = (value: number | string) => {
   const amount = Number(value) || 0;
@@ -14,7 +28,7 @@ const formatCurrency = (value: number | string) => {
 };
 
 export default function DashboardComposedChart() {
-  const [dnaData, setDnaData] = useState<any>(null);
+  const [dnaData, setDnaData] = useState<DnaData | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -22,6 +36,10 @@ export default function DashboardComposedChart() {
       try {
         const stored = readStoredWizardData();
         if (!stored) {
+          setDnaData(null);
+          return;
+        }
+        if (!isDnaData(stored)) {
           setDnaData(null);
           return;
         }

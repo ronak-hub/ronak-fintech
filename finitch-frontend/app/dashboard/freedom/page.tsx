@@ -123,6 +123,7 @@ export default function FreedomPathPage() {
   }, [freedomData, buildLocalFreedomData]);
 
   const fetchFreedomMetrics = useCallback(async (): Promise<void> => {
+    await Promise.resolve();
     try {
       const token = getAuthToken();
       if (!token) {
@@ -213,7 +214,8 @@ export default function FreedomPathPage() {
   }, []);
 
   useEffect(() => {
-    void fetchFreedomMetrics();
+    const timeoutId = setTimeout(() => void fetchFreedomMetrics(), 0);
+    return () => clearTimeout(timeoutId);
   }, [fetchFreedomMetrics]);
 
   const freedomTrend = useMemo(() => {

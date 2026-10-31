@@ -2,6 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
+import type { TooltipValueType } from 'recharts';
 
 type TravelDestination = {
   continent: string;
@@ -33,7 +34,7 @@ export default function TravelCharts({ destinations }: { destinations: TravelDes
             <CartesianGrid strokeDasharray="3 3" stroke="#071421" />
             <XAxis dataKey="name" tick={{ fill: '#94A3B8' }} />
             <YAxis tick={{ fill: '#94A3B8' }} />
-            <Tooltip formatter={(v: any) => `${v}k`} />
+            <Tooltip formatter={(value: TooltipValueType | undefined) => `${typeof value === 'number' || typeof value === 'string' ? value : 0}k`} />
             <Bar dataKey="value" fill="#06B6D4" radius={[6, 6, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>

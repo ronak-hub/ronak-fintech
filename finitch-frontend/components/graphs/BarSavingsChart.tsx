@@ -3,7 +3,8 @@
 import React from 'react';
 import * as Recharts from 'recharts';
 
-type Props = { data: any };
+type SavingsChartDatum = { name: string; savings: number };
+type Props = { data: SavingsChartDatum[] };
 
 export default function BarSavingsChart({ data }: Props) {
   if (!Array.isArray(data) || data.length === 0) {
