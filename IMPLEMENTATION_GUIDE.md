@@ -81,7 +81,7 @@ export default {
 **Package Dependencies Installation:**
 ```bash
 npm install \
-  next@16.2.2 \
+  next@16.4.3 \
   react@19.2.4 \
   react-dom@19.2.4 \
   typescript@5.9.3 \
@@ -1153,10 +1153,10 @@ This implementation guide covers all major components and features of the VAULTI
 4. **Scalability** through proper architecture
 5. **Testing & validation** methodologies
 
-The combination of Next.js frontend, FastAPI backend, and PostgreSQL database (with optional SQLite fallback) creates a robust, maintainable full-stack application suitable for both learning and production deployment.
+The combination of Next.js frontend, FastAPI backend, and PostgreSQL database (with optional SQLite fallback) creates a maintainable full-stack application. The current deployment is a preview; production use requires a production-grade database and independent security review.
 
 ---
 
-**Document Version:** 1.0  
-**Last Updated:** 2026-06-19  
-**Status:** Complete & Production-Ready
+**Document Version:** 1.0
+**Last Updated:** 2026-10-31
+**Status:** Preview deployed; production readiness remains pending

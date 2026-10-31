@@ -2,8 +2,8 @@
 
 > A modern financial decision intelligence platform built with Next.js, React, FastAPI, and SQLAlchemy.
 
-**Status:** Launch preparation; production deployment and security certification are not complete.  
-**Last Updated:** 2026-06-19  
+**Status:** Preview deployment is live; production readiness and security certification are not complete. The Render free-tier database is preview-only.
+**Last Updated:** 2026-10-31
 **Version:** 1.0.0
 
 ---
@@ -87,7 +87,7 @@ The application combines a modern, responsive frontend with a high-performance a
 ### Frontend
 | Technology | Version | Purpose |
 |-----------|---------|---------|
-| Next.js | 16.2.2 | React meta-framework |
+| Next.js | 16.4.3 | React meta-framework |
 | React | 19.2.4 | UI library |
 | TypeScript | 5.9.3 | Type-safe JavaScript |
 | Tailwind CSS | 4 | Utility-first styling |
@@ -170,17 +170,19 @@ VAULTIC/
 ## 🚀 Quick Start
 
 ### Prerequisites
-- **Node.js** 18+ (with npm)
+- **Node.js** 20.9+ (with npm)
 - **Python** 3.9+
 - **Git**
 
 ### Public deployment (Vercel + Render)
 
-This app is prepared for a public deployment with a separate frontend and backend:
+The live preview uses a separate frontend and backend:
 
-- Frontend: Vercel (Next.js)
-- Backend: Render (FastAPI)
-- Database: Render Postgres or any managed PostgreSQL service
+- Frontend: [https://ronak-fintech.vercel.app](https://ronak-fintech.vercel.app)
+- Backend: [https://vaultic-backend-j4jj.onrender.com](https://vaultic-backend-j4jj.onrender.com)
+- Database: Render PostgreSQL (free preview tier; not suitable for production data)
+
+The backend `/health` endpoint has been verified to report PostgreSQL connected.
 
 1. Deploy the backend and PostgreSQL database on Render using the included
    `render.yaml` Blueprint. It creates a free Oregon database for preview use;
@@ -688,16 +690,16 @@ This project demonstrates:
 - ✅ Type-safe development
 - ✅ Performance optimization
 - ✅ Responsive design
-- ✅ Production deployment configuration documented (deployment still requires provider setup and validation)
+- ✅ Live preview frontend and backend deployed and health-checked
 
 **Perfect for: Academic review, portfolio, technical interviews, learning**
 
 ---
 
-**Status:** Development complete; production readiness depends on deployment configuration, integration work, and independent testing.  
-**Last Updated:** 2026-06-19  
+**Status:** Preview deployed; production readiness still requires a production-grade database, integration validation, and independent security review.
+**Last Updated:** 2026-10-31
 **Version:** 1.0.0  
-**All Systems:** Operational 🚀
+**Preview:** Live; free-tier services may sleep or expire.
 # Vaultic Current Architecture Guide
 
 Vaultic is a full-stack fintech application for personal financial intelligence. It combines onboarding data, imported transactions, goals, spending analytics, leak detection, freedom projections, stress testing, and AI-style insight surfaces into one dashboard experience.

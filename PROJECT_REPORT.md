@@ -30,7 +30,7 @@ Vaultic is a financial decision intelligence engine designed to help users visua
 ### 2.1 Frontend Stack
 
 #### Framework & Runtime
-- **Next.js 16.2.2** - React meta-framework with server-side rendering and Turbopack bundler
+- **Next.js 16.4.3** - React meta-framework with server-side rendering and Turbopack bundler
 - **React 19.2.4** - Component-based UI library
 - **TypeScript 5.9.3** - Type-safe JavaScript development
 - **Node.js** - JavaScript runtime environment
@@ -817,7 +817,7 @@ This project demonstrates:
 
 ## 14. CONCLUSION
 
-**VAULTIC** is a fully functional, production-ready financial decision intelligence application built entirely from scratch using modern web technologies. The project demonstrates comprehensive full-stack development capabilities, from responsive UI design to secure backend architecture.
+**VAULTIC** is a full-stack financial decision intelligence application with a live preview deployment. It is not yet production-ready: production use requires a production-grade database and independent security review. The project demonstrates full-stack development capabilities, from responsive UI design to backend architecture.
 
 **Key Achievements:**
 - ✅ 100% custom development (no template usage)

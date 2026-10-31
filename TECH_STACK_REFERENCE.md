@@ -9,7 +9,7 @@ This document provides a complete reference of all technologies, libraries, and 
 ## FRONTEND TECHNOLOGY STACK
 
 ### Core Framework
-**Next.js 16.2.2**
+**Next.js 16.4.3**
 - **What:** React meta-framework with build optimization
 - **Why:** 
   - Server-side rendering (SSR) for better performance
@@ -335,7 +335,7 @@ This document provides a complete reference of all technologies, libraries, and 
 ```json
 {
   "dependencies": {
-    "next": "16.2.2",
+    "next": "16.4.3",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "tailwindcss": "4",
@@ -573,7 +573,7 @@ fintechbackend
 |-----------|---------|--------|------|--------|
 | FastAPI | 0.104.1 | 3.9+ | - | ✅ Stable |
 | SQLAlchemy | 2.0.23 | 3.9+ | - | ✅ Latest |
-| Next.js | 16.2.2 | - | 18+ | ✅ Latest |
+| Next.js | 16.4.3 | - | 20.9+ | ✅ |
 | React | 19.2.4 | - | 18+ | ✅ Latest |
 | TypeScript | 5.9.3 | - | 18+ | ✅ Latest |
 
@@ -630,7 +630,7 @@ fintechbackend
 | Aspect | Technology | Version | Purpose |
 |--------|-----------|---------|---------|
 | **Frontend Runtime** | Node.js | 18+ | JavaScript runtime |
-| **React Framework** | Next.js | 16.2.2 | Meta-framework |
+| **React Framework** | Next.js | 16.4.3 | Meta-framework |
 | **UI Library** | React | 19.2.4 | Component library |
 | **Language** | TypeScript | 5.9.3 | Type-safe JS |
 | **Styling** | Tailwind CSS | 4 | Utility-first CSS |
