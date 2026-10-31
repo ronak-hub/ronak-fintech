@@ -178,10 +178,21 @@ export default function GoalDetailPage() {
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8001';
       const token = getAuthToken();
-      const payload: Record<string, unknown> = {};
-      if (merged.savings_amount !== undefined) payload.savings_amount = Number(merged.savings_amount);
-      if (merged.goal_amount !== undefined) payload.goal_amount = Number(merged.goal_amount);
-      if (merged.monthly_income !== undefined) payload.monthly_income = Number(merged.monthly_income);
+      const toAmount = (value: unknown) => {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+      };
+      const rate = toAmount(merged.target_savings_rate ?? 0.3);
+      const payload: Record<string, unknown> = {
+        monthly_income: toAmount(merged.monthly_income),
+        fixed_expenses: toAmount(merged.fixed_expenses),
+        bank_balance: toAmount(merged.bank_balance),
+        target_savings_rate: Math.min(1, rate),
+        primary_goal: goal.shortTitle,
+        goal_amount: toAmount(merged.goal_amount),
+        expenses: Array.isArray(merged.expenses) ? merged.expenses : [],
+      };
+      if (merged.savings_amount !== undefined) payload.savings_amount = toAmount(merged.savings_amount);
       // Only call backend if we have something meaningful to persist
       if (typeof fetch !== 'undefined' && Object.keys(payload).length > 0) {
         void (async () => {

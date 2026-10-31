@@ -43,7 +43,7 @@ services:
     volumes:
       - ./fintechbackend:/app
       - vaultic_keys:/app/keys
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload --no-access-log
     networks:
       - vaultic-network
     healthcheck:

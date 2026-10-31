@@ -1,28 +1,33 @@
-from fastapi import FastAPI, HTTPException, Depends, status, Header
-from sqlmodel import Session, select, func
-from sqlalchemy import or_
-from database_new import engine, create_db_and_tables, get_session, lifespan_startup, lifespan_shutdown
-from models import Transaction, SMSInput, User, Goal, PlanInput, ProfileUpdate, UserProfileSnapshot
-from typing import Annotated, Optional
-from fastapi.middleware.cors import CORSMiddleware
-from websocket_manager import manager
-from websocket_routes import router as websocket_router
-import uvicorn
+import hmac
+import logging
+import os
+import re
+import secrets
+import asyncio
+from contextlib import asynccontextmanager
 from datetime import datetime, date, timedelta
 import calendar
 import math
-from pydantic import BaseModel
-from auth import hash_password, verify_password, create_access_token, SECRET_KEY, ALGORITHM
-from security import get_current_user, require_roles
-from jose import jwt, JWTError
-from fastapi.security import OAuth2PasswordBearer
-from config import settings
-import re
-import logging
-from fastapi.responses import RedirectResponse, Response
+from typing import Annotated, Optional
+from urllib.parse import urlencode, quote
+from hashlib import sha256
+import base64
+
 import requests
-from urllib.parse import urlencode
-import os
+from fastapi import FastAPI, HTTPException, Depends, status, Header, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse, Response
+from pydantic import BaseModel, Field, field_validator, model_validator
+from sqlmodel import Session, select, func
+from sqlalchemy import or_
+from database_new import get_session, lifespan_startup, lifespan_shutdown
+from models import Transaction, SMSInput, User, Goal, PlanInput, ProfileUpdate, UserProfileSnapshot
+from websocket_manager import manager
+from websocket_routes import router as websocket_router
+import uvicorn
+from auth import hash_password, verify_password, create_access_token
+from security import get_current_user, require_roles
+from config import settings
 import json
 
 logger = logging.getLogger(__name__)
@@ -35,8 +40,10 @@ CATEGORY_ENTERTAINMENT = "Entertainment"
 API_PREFIX = settings.API_V1_PREFIX
 
 # Create FastAPI app with lifespan context manager for startup/shutdown
+@asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    settings.validate_production_configuration()
     await lifespan_startup()
     logger.info("✅ Vaultic backend initialized")
     yield
@@ -48,6 +55,9 @@ app = FastAPI(
     title=settings.API_TITLE,
     version="2.0.0",
     description="Autonomous financial intelligence platform with real-time WebSocket telemetry",
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None if settings.is_production else "/redoc",
+    openapi_url=None if settings.is_production else "/openapi.json",
     lifespan=lifespan
 )
 
@@ -59,57 +69,43 @@ async def add_security_headers(request, call_next):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     response.headers["Cache-Control"] = "no-store"
-    if settings.ENVIRONMENT == "production":
+    if settings.is_production:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok"}
+    """Readiness check: only report ready when the configured database responds."""
+    from database_new import engine
+    try:
+        with engine.connect() as connection:
+            connection.exec_driver_sql("SELECT 1")
+    except Exception as error:
+        logger.warning("Database readiness check failed: %s", type(error).__name__)
+        raise HTTPException(status_code=503, detail="Database unavailable") from error
+    return {"status": "ok", "database": "connected"}
 
-# Fixed: Instruct OAuth2 to use our flexible JSON-compatible token path
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
-# Enhanced CORS policy using configuration
+@app.get("/integrations/status")
+async def integrations_status():
+    """Expose enabled/disabled states only; never return provider credentials."""
+    return {
+        "google_oauth_configured": bool(
+            settings.GOOGLE_CLIENT_ID and settings.GOOGLE_CLIENT_SECRET
+        ),
+        "gemini_configured": bool(settings.GOOGLE_API_KEY),
+    }
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"]
+    allow_origins=settings.cors_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Vaultic-Token"],
 )
 
 # Include WebSocket routes
 app.include_router(websocket_router, prefix=settings.API_V1_PREFIX)
-
-def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], session: Annotated[Session, Depends(get_session)]):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate identity",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
-    
-    user = session.exec(select(User).where(or_(User.email == username, User.username == username))).first()
-    if user is None:
-        raise credentials_exception
-    return user
-
-
-def require_roles(*allowed_roles: str):
-    """Dependency factory to enforce RBAC on routes."""
-    def role_checker(user: Annotated[User, Depends(get_current_user)]):
-        if user.role not in allowed_roles:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient privileges")
-        return user
-    return role_checker
 
 # --- MEMORY-CONTEXT ENGINE LOGIC ---
 def compile_financial_destiny_matrix(user_id: int, session: Session) -> str:
@@ -166,7 +162,7 @@ def compile_financial_destiny_matrix(user_id: int, session: Session) -> str:
     return compiled_log
 
 def compute_required_sip(goal_amount: float, years: int, current_capital: float = 0.0, annual_return: float = 0.12) -> float:
-    """SIP needed so FV(current) + FV(annuity-due) reaches goal_amount."""
+    """Monthly end-of-month contribution needed to reach a nominal target."""
     r = annual_return / 12
     n = max(1, int(years) * 12)
     goal = max(0.0, float(goal_amount or 0))
@@ -181,18 +177,21 @@ def compute_required_sip(goal_amount: float, years: int, current_capital: float 
     if remaining <= 0:
         return 0.0
 
-    compounding_multiplier = (((1 + r) ** n - 1) / r) * (1 + r)
+    # Contributions are deposited at month end, matching the projection loop.
+    compounding_multiplier = ((1 + r) ** n - 1) / r
     return round(remaining / compounding_multiplier, 2)
 
 
 def calculate_freedom_projection(user: User, boost: float = 0):
     fixed_costs = (user.rent or 0) + (user.emis or 0) + (user.insurance or 0)
     income = user.monthly_income or 0
-    savings_rate = user.target_savings_rate if user.target_savings_rate is not None else 0.30
+    savings_rate = min(1.0, max(0.0, user.target_savings_rate if user.target_savings_rate is not None else 0.30))
     cash_available = max(0.0, income - fixed_costs)
     target_savings = income * savings_rate
     # Never invent investable cash above surplus after fixed costs
-    monthly_investment = min(target_savings, cash_available) + boost
+    # A simulation may increase or reduce the planned contribution, but cannot
+    # allocate more than the user's post-fixed-cost surplus.
+    monthly_investment = min(cash_available, max(0.0, target_savings + boost))
     current_capital = user.current_bank_balance or 0
 
     target_goal = user.goal_amount if getattr(user, 'goal_amount', None) else 50000000
@@ -229,26 +228,58 @@ def get_current_pulse_data(session: Session, user: User):
     days_left = calendar.monthrange(today.year, today.month)[1] - today.day + 1
     fixed_costs = (user.rent or 0) + (user.emis or 0) + (user.insurance or 0)
     savings_rate = user.target_savings_rate if user.target_savings_rate is not None else 0.30
-    investments = (user.monthly_income or 0) * savings_rate
+    income = max(0.0, user.monthly_income or 0)
+    cash_available = max(0.0, income - fixed_costs)
+    investments = min(cash_available, income * min(1.0, max(0.0, savings_rate)))
     
-    safe_pool = (user.monthly_income or 0) - fixed_costs - investments - spent
+    safe_pool = income - fixed_costs - investments - spent
     daily_limit = safe_pool / days_left if days_left > 0 else 0
     return round(max(0, daily_limit), 2), spent
 
 class AuthInput(BaseModel):
-    username: Optional[str] = None
-    email: Optional[str] = None
-    password: str
+    username: Optional[str] = Field(default=None, min_length=1, max_length=254)
+    email: Optional[str] = Field(default=None, max_length=254)
+    password: str = Field(min_length=1, max_length=72)
 
+    @field_validator("username", "email")
+    @classmethod
+    def normalize_identity(cls, value: Optional[str]) -> Optional[str]:
+        return value.strip().lower() if value else value
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: Optional[str]) -> Optional[str]:
+        if value and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", value):
+            raise ValueError("Enter a valid email address.")
+        return value
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_encoding(cls, value: str) -> str:
+        if len(value.encode("utf-8")) > 72:
+            raise ValueError("Password must be no more than 72 UTF-8 bytes.")
+        return value
+
+    @model_validator(mode="after")
     def validate_identifier(self):
         if not self.email and not self.username:
-            raise ValueError("Either email or identity ID must be provided")
+            raise ValueError("Email or username is required.")
+        if self.email and self.username and len(self.username) < 3:
+            raise ValueError("Username must be at least 3 characters.")
+        return self
+
+
+class SMSWebhookInput(BaseModel):
+    user_id: int = Field(gt=0)
+    text: str = Field(min_length=1, max_length=10_000)
+    bank_name: Optional[str] = Field(default="Automated", max_length=100)
 
 class SimulationInput(BaseModel):
-    boost_amount: float
+    boost_amount: float = Field(ge=-1_000_000_000, le=1_000_000_000)
 
 class ParseSMSInput(BaseModel):
-    raw_sms: str
+    raw_sms: str = Field(min_length=1, max_length=25_000)
+    use_gemini: bool = False
 
 class ParsedSMSTransaction(BaseModel):
     merchant: str
@@ -263,10 +294,15 @@ class ImportSMSTransactionsInput(BaseModel):
 
 @app.post("/auth/signup", responses={400: {"description": "Identity already exists"}})
 async def signup(user_data: AuthInput, session: Annotated[Session, Depends(get_session)]):
-    if not user_data.email and not user_data.username:
-        raise HTTPException(status_code=400, detail="Email or identity ID is required")
+    if len(user_data.password) < 12:
+        raise HTTPException(
+            status_code=422, detail="Password must be at least 12 characters."
+        )
 
     identifier = user_data.username or user_data.email
+    if not identifier:
+        raise HTTPException(status_code=400, detail="Email or username is required.")
+
     query = select(User)
     if user_data.email and user_data.username:
         query = query.where(or_(User.username == identifier, User.email == user_data.email))
@@ -291,12 +327,8 @@ async def signup(user_data: AuthInput, session: Annotated[Session, Depends(get_s
     session.commit()
     return {"status": "Identity Created"}
 
-# Fixed: Changed endpoint argument footprint to process JSON data model streams natively
 @app.post("/auth/login", responses={401: {"description": "Invalid credentials"}})
 async def login(user_data: AuthInput, session: Annotated[Session, Depends(get_session)]):
-    if not user_data.email and not user_data.username:
-        raise HTTPException(status_code=401, detail="Email or identity ID is required")
-
     query = select(User)
     if user_data.email and user_data.username:
         query = query.where(or_(User.email == user_data.email, User.username == user_data.username))
@@ -310,7 +342,9 @@ async def login(user_data: AuthInput, session: Annotated[Session, Depends(get_se
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
     token_sub = user.email or user.username
-    token = create_access_token({"sub": token_sub, "role": user.role})
+    token = create_access_token(
+        {"sub": token_sub, "user_id": user.id, "role": user.role}
+    )
     return {"access_token": token, "token_type": "bearer"}
 
 
@@ -327,20 +361,48 @@ def google_login():
             ),
         )
 
+    oauth_state = secrets.token_urlsafe(32)
+    code_verifier = secrets.token_urlsafe(64)
+    code_challenge = base64.urlsafe_b64encode(
+        sha256(code_verifier.encode("ascii")).digest()
+    ).rstrip(b"=").decode("ascii")
     params = {
         "client_id": settings.GOOGLE_CLIENT_ID,
         "redirect_uri": settings.GOOGLE_REDIRECT_URI,
         "response_type": "code",
         "scope": "openid email profile",
-        "access_type": "offline",
-        "prompt": "consent",
+        "state": oauth_state,
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
     }
     url = "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params)
-    return RedirectResponse(url)
+    response = RedirectResponse(url)
+    response.set_cookie(
+        "vaultic_oauth_state",
+        oauth_state,
+        max_age=600,
+        httponly=True,
+        secure=settings.is_production,
+        samesite="lax",
+        path="/auth/google",
+    )
+    response.set_cookie(
+        "vaultic_oauth_verifier",
+        code_verifier,
+        max_age=600,
+        httponly=True,
+        secure=settings.is_production,
+        samesite="lax",
+        path="/auth/google",
+    )
+    return response
 
 
 @app.get("/auth/google/callback")
-def google_callback(code: str, session: Annotated[Session, Depends(get_session)]):
+def google_callback(
+    request: Request,
+    session: Annotated[Session, Depends(get_session)],
+):
     """Exchange authorization code for tokens, fetch userinfo, and create local user + JWT."""
     if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET:
         raise HTTPException(
@@ -351,40 +413,84 @@ def google_callback(code: str, session: Annotated[Session, Depends(get_session)]
             ),
         )
 
-    token_resp = requests.post(
-        "https://oauth2.googleapis.com/token",
-        data={
-            "code": code,
-            "client_id": settings.GOOGLE_CLIENT_ID,
-            "client_secret": settings.GOOGLE_CLIENT_SECRET,
-            "redirect_uri": settings.GOOGLE_REDIRECT_URI,
-            "grant_type": "authorization_code",
-        },
-        headers={"Content-Type": "application/x-www-form-urlencoded"}
-    )
-    if token_resp.status_code != 200:
-        raise HTTPException(status_code=400, detail="Failed to exchange code for token")
+    provider_error = request.query_params.get("error")
+    if provider_error:
+        raise HTTPException(status_code=400, detail="Google sign-in was cancelled or rejected.")
 
-    tokens = token_resp.json()
-    access_token = tokens.get("access_token")
-    if not access_token:
-        raise HTTPException(status_code=400, detail="No access token returned from provider")
+    code = request.query_params.get("code", "")
+    state = request.query_params.get("state", "")
+    expected_state = request.cookies.get("vaultic_oauth_state")
+    code_verifier = request.cookies.get("vaultic_oauth_verifier")
+    if (
+        not code
+        or not code_verifier
+        or not expected_state
+        or not state
+        or not hmac.compare_digest(state, expected_state)
+    ):
+        raise HTTPException(status_code=400, detail="Invalid OAuth state.")
 
-    # Fetch user info
-    userinfo_resp = requests.get("https://openidconnect.googleapis.com/v1/userinfo", headers={"Authorization": f"Bearer {access_token}"})
+    google_http = requests.Session()
+    google_http.trust_env = settings.GOOGLE_USE_SYSTEM_PROXY
+    try:
+        try:
+            token_resp = google_http.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "code": code,
+                    "client_id": settings.GOOGLE_CLIENT_ID,
+                    "client_secret": settings.GOOGLE_CLIENT_SECRET,
+                    "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+                    "grant_type": "authorization_code",
+                    "code_verifier": code_verifier,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                timeout=(3, 10),
+            )
+        except requests.RequestException as error:
+            logger.warning("Google OAuth token exchange failed: %s", type(error).__name__)
+            raise HTTPException(
+                status_code=503,
+                detail="Google sign-in could not reach Google. Check backend network or proxy settings and retry.",
+            ) from None
+        if token_resp.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to exchange code for token")
+
+        tokens = token_resp.json()
+        access_token = tokens.get("access_token")
+        if not access_token:
+            raise HTTPException(status_code=400, detail="No access token returned from provider")
+
+        # Fetch user info
+        userinfo_resp = google_http.get(
+            "https://openidconnect.googleapis.com/v1/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=(3, 10),
+        )
+    except requests.RequestException:
+        logger.warning("Google OAuth user profile request failed")
+        raise HTTPException(
+            status_code=503,
+            detail="Google sign-in could not reach Google. Check backend network or proxy settings and retry.",
+        ) from None
+    finally:
+        google_http.close()
     if userinfo_resp.status_code != 200:
         raise HTTPException(status_code=400, detail="Failed to fetch user info")
 
     userinfo = userinfo_resp.json()
-    email = userinfo.get("email")
-    if not email:
-        raise HTTPException(status_code=400, detail="No email returned from provider")
+    email = userinfo.get("email", "").strip().lower()
+    if not email or not userinfo.get("email_verified"):
+        raise HTTPException(status_code=400, detail="Google did not verify an email address.")
 
     # Upsert local user by email identity
-    user = session.exec(select(User).where(or_(User.email == email, User.username == email))).first()
+    user = session.exec(select(User).where(User.email == email)).first()
     if not user:
+        username = email
+        if session.exec(select(User).where(User.username == username)).first():
+            username = f"{email.split('@', 1)[0]}-{secrets.token_hex(4)}"
         user = User(
-            username=email,
+            username=username,
             email=email,
             hashed_password=hash_password(os.urandom(24).hex()),
             monthly_income=0.0,
@@ -395,10 +501,16 @@ def google_callback(code: str, session: Annotated[Session, Depends(get_session)]
         session.commit()
         session.refresh(user)
 
-    token = create_access_token({"sub": user.username, "role": user.role})
-    # Redirect back to frontend with token in query string
-    frontend_redirect = f"http://localhost:3000/?token={token}"
-    return RedirectResponse(frontend_redirect)
+    token = create_access_token(
+        {"sub": user.username, "user_id": user.id, "role": user.role}
+    )
+    frontend_redirect = (
+        f"{settings.FRONTEND_BASE_URL.rstrip('/')}/login#token={quote(token)}"
+    )
+    response = RedirectResponse(frontend_redirect)
+    response.delete_cookie("vaultic_oauth_state", path="/auth/google")
+    response.delete_cookie("vaultic_oauth_verifier", path="/auth/google")
+    return response
 
 
 @app.get("/favicon.ico")
@@ -424,6 +536,9 @@ def split_fixed_expenses(fixed_total: float, expenses: Optional[list] = None) ->
                 amount = float(item.get("amount") or 0)
             except (TypeError, ValueError):
                 amount = 0.0
+            if not math.isfinite(amount):
+                amount = 0.0
+            amount = max(0.0, amount)
             if "rent" in category:
                 rent += amount
             elif "emi" in category or "loan" in category:
@@ -446,8 +561,12 @@ def resolve_wealth_goal_amount(
     threshold = max(monthly_income * 24, 500000)
     if goal_amount >= threshold:
         return goal_amount
-    savings = savings_amount if savings_amount and savings_amount > 0 else monthly_income * target_savings_rate
-    monthly_outflow = fixed_expenses + savings
+    cash_available = max(0.0, monthly_income - fixed_expenses)
+    savings = savings_amount if savings_amount is not None and savings_amount > 0 else monthly_income * target_savings_rate
+    savings = min(max(0.0, savings), cash_available)
+    # Savings are not spending. Estimate total consumption as income minus
+    # savings, with fixed obligations as a floor when inputs are inconsistent.
+    monthly_outflow = max(max(0.0, fixed_expenses), max(0.0, monthly_income - savings))
     fi_target = (monthly_outflow * 12) / 0.06
     return fi_target if fi_target > 0 else 50000000.0
 
@@ -672,7 +791,7 @@ async def stress_test_scenario(
         fixed_costs = (user.rent or 0) + (user.emis or 0) + (user.insurance or 0)
         income = user.monthly_income or 0
         monthly_expenses = fixed_costs + (income * 0.25)  # Add lifestyle buffer
-        savings_rate = user.target_savings_rate if user.target_savings_rate is not None else 0.30
+        savings_rate = min(1.0, max(0.0, user.target_savings_rate if user.target_savings_rate is not None else 0.30))
         cash_available = max(0.0, income - fixed_costs)
         monthly_savings = min(income * savings_rate, cash_available)
         
@@ -1152,11 +1271,63 @@ async def parse_sms_transactions(
             detail="Vaultic could not detect valid bank transactions. Try pasting complete SMS messages with amount and merchant details."
         )
 
+    gemini_enhanced_count = 0
+    gemini_failed_count = 0
+    if data.use_gemini:
+        if not settings.GOOGLE_API_KEY:
+            raise HTTPException(
+                status_code=503,
+                detail="Gemini enrichment is not configured. Use local parsing or configure GOOGLE_API_KEY.",
+            )
+        if len(transactions) > 20:
+            raise HTTPException(
+                status_code=422,
+                detail="Gemini enrichment is limited to 20 transactions per request.",
+            )
+
+        from parser import extract_transaction_info
+
+        valid_categories = {
+            "food & dining": "Food & Dining",
+            "food": "Food & Dining",
+            "dining": "Food & Dining",
+            "shopping": "Shopping",
+            "transport & fuel": "Transport & Fuel",
+            "transport": "Transport & Fuel",
+            "travel": "Transport & Fuel",
+            "bills & utilities": "Bills & Utilities",
+            "bills": "Bills & Utilities",
+            "utilities": "Bills & Utilities",
+            "entertainment": "Entertainment",
+            "healthcare": "Healthcare",
+            "investment": "Investment",
+            "personal transfer": "Personal Transfer",
+            "transfer": "Personal Transfer",
+            "other": "Other",
+        }
+        for transaction in transactions:
+            try:
+                suggestion = await asyncio.to_thread(
+                    extract_transaction_info, transaction["source_text"]
+                )
+                merchant = str(suggestion.merchant or "").strip()
+                if merchant:
+                    transaction["merchant"] = normalize_merchant_name(merchant)
+                category = valid_categories.get(str(suggestion.category).strip().lower())
+                if category:
+                    transaction["category"] = category
+                gemini_enhanced_count += 1
+            except Exception as error:
+                gemini_failed_count += 1
+                logger.warning("Gemini enrichment failed: %s", type(error).__name__)
+
     return {
         "status": "success",
         "transactions": transactions,
         "failed_count": len(failures),
         "warnings": failures[:5],
+        "gemini_enhanced_count": gemini_enhanced_count,
+        "gemini_failed_count": gemini_failed_count,
     }
 
 @app.post("/api/import-sms-transactions")
@@ -1201,11 +1372,9 @@ async def import_sms_transactions(
         imported.append(new_transaction)
 
     if imported:
-        user.current_bank_balance = max(
-            0.0,
-            (user.current_bank_balance or 0.0) - sum(tx.amount for tx in imported)
-        )
-        session.add(user)
+        # This endpoint imports historical statements. The saved balance is a
+        # current snapshot, so subtracting old transactions would double-count
+        # them and corrupt the starting capital used by projections.
         session.commit()
         for tx in imported:
             session.refresh(tx)
@@ -1235,7 +1404,13 @@ async def import_sms_transactions(
 @app.post("/analytics/sms-ingest")
 async def ingest_sms_notification(data: SMSInput, user: Annotated[User, Depends(get_current_user)], session: Annotated[Session, Depends(get_session)]):
     """Ingest SMS transaction and broadcast to connected WebSocket clients."""
-    amount, merchant, category = extract_sms_metadata(data.text)
+    parsed = parse_single_sms_transaction(data.text)
+    if not parsed:
+        raise HTTPException(status_code=400, detail="Neural Parser could not safely extract transaction parameters.")
+    if parsed["transaction_type"] == "Credit":
+        return {"status": "CREDIT_IGNORED", "detail": "Credit messages are not recorded as expenses."}
+
+    amount, merchant, category = parsed["amount"], parsed["merchant"], parsed["category"]
     
     if amount <= 0.0:
         raise HTTPException(status_code=400, detail="Neural Parser could not safely extract debit parameters.")
@@ -1336,60 +1511,62 @@ async def generate_autonomous_plan(data: PlanInput, user: Annotated[User, Depend
     }
 
 
-@app.post(API_PREFIX + "/telemetry/sms-webhook", responses={403: {"description": "Invalid webhook token or secret"}, 400: {"description": "Invalid SMS crawl data"}, 404: {"description": "No active users for webhook ingestion"}})
+@app.post(API_PREFIX + "/telemetry/sms-webhook", responses={403: {"description": "Invalid webhook token or secret"}, 400: {"description": "Invalid SMS crawl data"}, 404: {"description": "Target user not found"}})
 async def sms_webhook_ingestion(
-    data: SMSInput,
+    data: SMSWebhookInput,
     x_vaultic_token: Annotated[str | None, Header()] = None,
     session: Annotated[Session, Depends(get_session)] = None
 ):
-    """
-    Secure webhook endpoint for automated SMS forwarding with asymmetric cryptography.
-    Validates X-Vaultic-Token header using RSA signatures.
-    Automatically parses and broadcasts to connected clients without requiring user authentication.
-    """
-    from crypto import verify_secure_webhook_token
-    
-    # Validate webhook token with cryptographic verification
-    if x_vaultic_token:
-        is_valid, _ = verify_secure_webhook_token(x_vaultic_token)
-        if not is_valid:
-            logger.warning("Invalid cryptographic webhook token attempted")
-            raise HTTPException(status_code=403, detail="Invalid webhook token signature")
-    else:
-        # Fallback to basic secret comparison for backward compatibility
-        if not settings.VAULTIC_WEBHOOK_SECRET:
-            raise HTTPException(status_code=403, detail="Webhook secret not configured")
-        logger.warning("Using basic token validation - upgrade to cryptographic verification recommended")
-    
-    # Parse SMS metadata
+    """Ingest an SMS transaction only for the explicitly selected user."""
+    webhook_secret = settings.VAULTIC_WEBHOOK_SECRET
+    if not webhook_secret:
+        raise HTTPException(status_code=503, detail="SMS webhook is not configured.")
+    if not x_vaultic_token or not hmac.compare_digest(x_vaultic_token, webhook_secret):
+        logger.warning("Rejected SMS webhook with missing or invalid token")
+        raise HTTPException(status_code=403, detail="Invalid webhook token.")
+
+    user = session.get(User, data.user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found.")
+
     amount, merchant, category = extract_sms_metadata(data.text)
-    
     if amount <= 0.0:
         raise HTTPException(status_code=400, detail="Could not extract transaction amount from SMS")
-    
-    is_transfer = "transfer" in data.text.lower() or "vpa" in data.text.lower()
-    
-    # Try to find user by bank name (or use first active user for demo)
-    user = session.exec(select(User).limit(1)).first()
-    
-    if not user:
-        logger.error("No active users found for webhook ingestion")
-    # Broadcast to WebSocket clients
+
+    is_transfer = bool(
+        re.search(r"\b(transfer|vpa)\b", data.text, re.IGNORECASE)
+    )
+    new_transaction = Transaction(
+        amount=round(amount, 2),
+        merchant=merchant,
+        bank_name=data.bank_name or "Automated",
+        category=category,
+        is_personal_transfer=is_transfer,
+        user_id=user.id,
+    )
+    session.add(new_transaction)
+    session.commit()
+    session.refresh(new_transaction)
+
     await manager.send_webhook_event(user.id, "sms_transaction", {
         "id": new_transaction.id,
         "amount": amount,
         "merchant": merchant,
         "category": category,
-        "bank": data.bank_name or "Automated",
+        "bank": new_transaction.bank_name,
         "balance_remaining": user.current_bank_balance
     })
-    
+
     logger.info(f"Webhook SMS processed: {merchant} {amount} INR")
-    
+    broadcast_status = (
+        "sent_to_active_clients"
+        if manager.get_connection_count(user.id) > 0
+        else "no_active_clients"
+    )
     return {
         "status": "WEBHOOK_PROCESSED",
         "transaction_id": new_transaction.id,
-        "broadcast_status": "sent_to_clients"
+        "broadcast_status": broadcast_status
     }
 
 
@@ -1406,5 +1583,6 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=port,
         log_level="info",
+        access_log=False,
         reload=settings.DEBUG_MODE
     )

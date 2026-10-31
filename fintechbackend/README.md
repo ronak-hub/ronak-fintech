@@ -72,11 +72,22 @@ JSON response returns to frontend
 
 - `POST /auth/signup` creates users.
 - `POST /auth/login` verifies password and returns a JWT.
+- New signup passwords require at least 12 characters and are limited to bcrypt's 72-byte input limit; existing users may continue signing in with previously accepted passwords.
 - Protected routes depend on `get_current_user`.
 - JWT `sub` is matched against username or email.
 - `User.role` supports role-based access.
 - `require_roles(...)` restricts admin routes.
-- WebSocket routes enforce ownership/admin access.
+- The telemetry WebSocket derives the user from a verified JWT subprotocol; it does not accept a client-selected user ID.
+- The browser stores its JWT in a JavaScript-readable cookie. `Secure` is added on HTTPS and `SameSite=Strict` is used, but this is not HttpOnly and remains exposed to XSS.
+
+## Production and integration limits
+
+- Production startup rejects SQLite, non-HTTPS frontend/CORS origins, and weak signing secrets. Use a managed PostgreSQL provider with its TLS and at-rest encryption controls enabled.
+- The SMS webhook requires a configured secret and an explicit target user ID. Its secret is a service credential; keep it private and rotate it if exposed.
+- File selection is browser-local only; no upload or persistent gallery permission is implemented.
+- Firebase environment values only configure the web client. Firebase Authentication, push notifications, and Storage are not integrated.
+- Google OAuth is an optional sign-in provider. Gemini SMS enrichment is a separate, optional feature with per-request user opt-in; local SMS parsing works without Google credentials.
+- Bank/account-aggregator connections and application-level database encryption are not implemented. Do not treat this project as certified or immune to attack.
 
 Seed admin/user roles:
 
@@ -229,6 +240,40 @@ API_PORT=8001
 ```
 
 Keep real secrets out of git.
+
+### Google sign-in
+
+Google sign-in is optional. In Google Cloud Console, configure an OAuth client
+of type **Web application**, add your frontend origin to **Authorized JavaScript
+origins**, and add the backend callback to **Authorized redirect URIs**. Set
+`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI` in the
+backend environment. Keep local credentials in the ignored `fintechbackend/.env.local`
+file, not the tracked `.env`. For local development with the supplied port mapping, use
+`http://127.0.0.1:8001/auth/google/callback`; in production use the exact HTTPS
+backend callback URL. The sign-in flow uses state and PKCE cookies and requests
+only the OpenID Connect `openid email profile` scopes. It does not retain Google
+access or refresh tokens. Without these credentials, password sign-in continues
+to work and Google sign-in reports that it is not configured.
+
+The Wealth Audit parser uses Gemini only when a signed-in user checks **Use
+optional Gemini enrichment**. This sends each detected SMS to Google to refine
+the merchant and category; amount, date, and debit/credit type remain locally
+parsed. The key is optional, requests are limited to 20 detected transactions,
+and failures keep the local result. Add `GOOGLE_API_KEY` to the ignored
+`fintechbackend/.env.local` file to enable it. The SMS
+text is not sent to Google unless the user opts in. The backend uses Google's
+structured `generateContent` REST endpoint; it does not require an extra Google
+SDK. `GEMINI_MODEL_NAME` defaults to `gemini-3.8-flash` and can be overridden.
+
+### PostgreSQL connectivity
+
+Local development defaults to SQLite. For PostgreSQL, set `DATABASE_URL` to a
+SQLAlchemy PostgreSQL URL, for example
+`postgresql://vaultic_user:your-password@localhost:5432/vaultic_db`; the backend
+checks connectivity at startup and `/health` returns HTTP 503 when the database
+cannot answer a readiness query. Docker Compose provisions PostgreSQL and waits
+for its health check before starting the backend. Production requires a managed
+PostgreSQL URL and should use the provider's TLS connection option when available.
 
 ## Verification
 

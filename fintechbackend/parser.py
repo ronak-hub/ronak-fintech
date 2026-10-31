@@ -1,89 +1,82 @@
-import os
-import instructor
-from pydantic import ValidationError
-from google import genai
-from dotenv import load_dotenv
+"""Optional Gemini enrichment for locally parsed bank SMS messages."""
+
+import re
+
+import requests
+
+from config import settings
 from models import TransactionAI
-from nlp_parser import parse_sms_transaction
-import logging
 
-load_dotenv()
-logger = logging.getLogger(__name__)
+GEMINI_CATEGORIES = [
+    "Food & Dining",
+    "Shopping",
+    "Transport & Fuel",
+    "Bills & Utilities",
+    "Entertainment",
+    "Healthcare",
+    "Investment",
+    "Personal Transfer",
+    "Other",
+]
 
-# Using the 2026 Stable Preview for Gemini 3
-MODEL_NAME = "gemini-3-flash-preview" 
-
-# Initialize the Instructor client
-client = instructor.from_provider(
-    f"google/{MODEL_NAME}", 
-    api_key=os.getenv("GOOGLE_API_KEY")
-)
 
 def extract_transaction_info(sms_text: str) -> TransactionAI:
+    """Extract merchant/category hints with Gemini after explicit user opt-in.
+
+    Amount, date, and debit/credit classification remain grounded in the local
+    parser, even when Gemini returns additional transaction fields.
     """
-    Takes raw SMS text and uses Gemini 3 to return a structured 
-    TransactionAI object. Optimized for Indian Banking SMS patterns.
-    Falls back to NLP-based parsing if Gemini API fails.
-    """
-    try:
-        return client.chat.completions.create(
-            model=MODEL_NAME, 
-            response_model=TransactionAI,
-            max_retries=2, # Increased retries for complex Indian SMS strings
-            messages=[
-                {
-                    "role": "system", 
-                    "content": (
-                        "You are a specialized Indian Fintech Parser. "
-                        "Identify if the transaction is a DEBIT (Spent) or CREDIT (Received). "
-                        "Extract: Amount, Merchant (e.g., Zomato, Swiggy, Amazon), Bank (e.g., HDFC, ICICI, SBI), "
-                        "and Category (Food, Travel, Bills, Shopping, Salary, Investment). "
-                        "If the merchant is a person (UPI transfer), set is_personal_transfer to True."
+    if not settings.GOOGLE_API_KEY:
+        raise RuntimeError("Gemini enrichment is not configured on this server.")
+
+    model = settings.GEMINI_MODEL_NAME.strip()
+    if not re.fullmatch(r"[A-Za-z0-9.-]{1,100}", model):
+        raise RuntimeError("GEMINI_MODEL_NAME contains invalid characters.")
+
+    response = requests.post(
+        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+        headers={"x-goog-api-key": settings.GOOGLE_API_KEY},
+        json={
+            "systemInstruction": {
+                "parts": [{
+                    "text": (
+                        "Extract the merchant, bank, and one category from this bank SMS. "
+                        "Do not infer missing details. For a person-to-person transfer, "
+                        "set is_personal_transfer to true."
                     )
+                }]
+            },
+            "contents": [{"parts": [{"text": sms_text}]}],
+            "generationConfig": {
+                "temperature": 0,
+                "maxOutputTokens": 256,
+                "responseMimeType": "application/json",
+                "responseSchema": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "amount": {"type": "NUMBER"},
+                        "merchant": {"type": "STRING"},
+                        "bank_name": {"type": "STRING"},
+                        "category": {"type": "STRING", "enum": GEMINI_CATEGORIES},
+                        "is_personal_transfer": {"type": "BOOLEAN"},
+                    },
+                    "required": [
+                        "amount",
+                        "merchant",
+                        "bank_name",
+                        "category",
+                        "is_personal_transfer",
+                    ],
                 },
-                {"role": "user", "content": f"SMS Text: {sms_text}"},
-            ],
-            validation_context={"sms": sms_text}
-        )
-    except Exception as e:
-        logger.warning(f"Gemini parser failed: {e}. Falling back to NLP parser.")
-        return _fallback_nlp_extraction(sms_text)
+            },
+        },
+        timeout=(3, 15),
+    )
+    response.raise_for_status()
 
-
-def _fallback_nlp_extraction(sms_text: str) -> TransactionAI:
-    """
-    Fallback NLP-based extraction when Gemini API is unavailable.
-    Uses spaCy entity recognition and pattern matching.
-    """
+    candidates = response.json().get("candidates", [])
     try:
-        amount, merchant, category, is_transfer = parse_sms_transaction(sms_text)
-        
-        # Map category to expected format
-        category_mapping = {
-            "Food & Dining": "Food",
-            "Transport & Fuel": "Travel",
-            "Bills & Utilities": "Bills",
-            "Shopping": "Shopping",
-            "Investment": "Investment",
-            "Entertainment": "Entertainment",
-            "Personal Transfer": "Transfer",
-        }
-        
-        mapped_category = category_mapping.get(category, "Uncategorized")
-        
-        return TransactionAI(
-            amount=amount,
-            merchant=merchant,
-            bank_name="Detected",
-            category=mapped_category,
-            is_personal_transfer=is_transfer
-        )
-    except Exception as nlp_error:
-        logger.error(f"NLP parser also failed: {nlp_error}. Returning safe fallback.")
-        return TransactionAI(
-            amount=0.0, 
-            merchant="Unknown", 
-            bank_name="Unknown", 
-            category="Uncategorized",
-            is_personal_transfer=False
-        )
+        result_text = candidates[0]["content"]["parts"][0]["text"]
+    except (IndexError, KeyError, TypeError) as error:
+        raise ValueError("Gemini returned no structured transaction result.") from error
+    return TransactionAI.model_validate_json(result_text)

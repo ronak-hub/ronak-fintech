@@ -1,36 +1,50 @@
 from typing import Annotated, Optional
+
 from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from sqlmodel import select
 from sqlalchemy import or_
 from database_new import get_session
 from sqlmodel import Session
 from models import User
-from auth import SECRET_KEY, ALGORITHM
+from auth import ALGORITHM, SECRET_KEY, TOKEN_ISSUER
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
 
 def decode_token(token: str) -> dict:
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM],
+            issuer=TOKEN_ISSUER,
+        )
         return payload
     except JWTError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from None
 
 
-def get_current_user(token: Annotated[str, Depends], session: Annotated[Session, Depends(get_session)]):
+def get_current_user(
+    token: Annotated[Optional[str], Depends(oauth2_scheme)],
+    session: Annotated[Session, Depends(get_session)],
+):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate identity",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    try:
-        payload = decode_token(token)
-        username: Optional[str] = payload.get("sub")
-        if username is None:
-            raise credentials_exception
-    except HTTPException:
-        raise
-    except Exception:
+    if token is None:
+        raise credentials_exception
+
+    payload = decode_token(token)
+    username: Optional[str] = payload.get("sub")
+    if username is None:
         raise credentials_exception
 
     user = session.exec(select(User).where(or_(User.email == username, User.username == username))).first()
@@ -55,5 +69,5 @@ async def get_user_from_token_ws(token: str, session: Session) -> Optional[User]
             return None
         user = session.exec(select(User).where(or_(User.email == username, User.username == username))).first()
         return user
-    except Exception:
+    except HTTPException:
         return None

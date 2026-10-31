@@ -12,7 +12,7 @@ Write-Host 'Starting Vaultic backend on http://127.0.0.1:8001...'
 Start-Process powershell -ArgumentList @(
     '-NoExit',
     '-Command',
-    "Set-Location '$backend'; & '$python' -m uvicorn main:app --host 127.0.0.1 --port 8001"
+    "Set-Location '$backend'; & '$python' -m uvicorn main:app --host 127.0.0.1 --port 8001 --no-access-log"
 )
 
 Write-Host 'Starting Vaultic frontend on http://localhost:3000...'

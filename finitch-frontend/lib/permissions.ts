@@ -1,71 +1,57 @@
-export type PermissionState = 'granted' | 'denied' | 'default' | 'unsupported';
+export type PermissionState = 'granted' | 'denied' | 'default' | 'unsupported' | 'error';
 
 export function getNotificationPermissionState(): PermissionState {
-  if (typeof window === 'undefined' || !('Notification' in window)) {
+  if (
+    typeof window === 'undefined' ||
+    !window.isSecureContext ||
+    !('Notification' in window)
+  ) {
     return 'unsupported';
   }
   return Notification.permission;
 }
 
 export async function requestNotificationPermission(): Promise<PermissionState> {
-  if (typeof window === 'undefined' || !('Notification' in window)) {
+  if (
+    typeof window === 'undefined' ||
+    !window.isSecureContext ||
+    !('Notification' in window)
+  ) {
     return 'unsupported';
   }
 
-  const permission = await Notification.requestPermission();
-  if (typeof window !== 'undefined') {
-    window.localStorage.setItem('vaultic-notification-permission', permission);
-  }
-  return permission;
+  return Notification.requestPermission();
 }
 
-export function getSavedNotificationPermission(): PermissionState {
-  if (typeof window === 'undefined') {
-    return 'unsupported';
+export async function openFilePicker(): Promise<File[]> {
+  if (typeof document === 'undefined') {
+    return [];
   }
 
-  const value = window.localStorage.getItem('vaultic-notification-permission');
-  if (value === 'granted' || value === 'denied' || value === 'default') {
-    return value;
-  }
-  return getNotificationPermissionState();
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    let finished = false;
+    input.type = 'file';
+    input.accept = 'image/*,.pdf,.csv';
+    input.multiple = true;
+    input.hidden = true;
+
+    const finish = (files: File[]) => {
+      if (finished) return;
+      finished = true;
+      input.remove();
+      resolve(files);
+    };
+
+    input.addEventListener('change', () => {
+      finish(Array.from(input.files ?? []));
+    }, { once: true });
+    input.addEventListener('cancel', () => finish([]), { once: true });
+    document.body.appendChild(input);
+    input.click();
+  });
 }
 
-export function openGalleryPicker(): void {
-  if (typeof document === 'undefined') return;
-
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'image/*,.pdf,.doc,.docx,.csv';
-  input.multiple = true;
-  input.style.display = 'none';
-  document.body.appendChild(input);
-
-  input.addEventListener('change', () => {
-    if (input.files && input.files.length > 0) {
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem('vaultic-gallery-access', 'enabled');
-      }
-    }
-    input.remove();
-  }, { once: true });
-
-  input.click();
-}
-
-export function hasGalleryAccess(): boolean {
-  if (typeof window === 'undefined') {
-    return false;
-  }
-  return window.localStorage.getItem('vaultic-gallery-access') === 'enabled';
-}
-
-export function markSecurityCheck(): void {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem('vaultic-security-seal', 'enabled');
-}
-
-export function isSecuritySealEnabled(): boolean {
-  if (typeof window === 'undefined') return false;
-  return window.localStorage.getItem('vaultic-security-seal') === 'enabled';
+export function isSecureBrowserContext(): boolean {
+  return typeof window !== 'undefined' && window.isSecureContext;
 }

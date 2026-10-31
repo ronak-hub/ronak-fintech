@@ -6,7 +6,7 @@ services:
     plan: free
     rootDir: fintechbackend
     buildCommand: pip install --upgrade pip && pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT --no-access-log
     healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
@@ -15,12 +15,24 @@ services:
         sync: false
       - key: SECRET_KEY
         generateValue: true
-      - key: VAULTIC_SECRET_KEY
-        generateValue: true
       - key: VAULTIC_WEBHOOK_SECRET
         generateValue: true
       - key: CORS_ORIGINS
-        value: https://your-vercel-app.vercel.app
+        sync: false
+      - key: FRONTEND_BASE_URL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: DB_POOL_SIZE
+        value: 5
+      - key: DB_MAX_OVERFLOW
+        value: 5
       - key: ENVIRONMENT
         value: production
       - key: DEBUG_MODE

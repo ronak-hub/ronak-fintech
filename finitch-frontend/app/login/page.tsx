@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, Loader2, Lock } from 'lucide-react';
 import Image from 'next/image';
-import { setCookie } from '@/lib/cookies';
+import { setAuthToken } from '@/lib/cookies';
 import { fetchApiWithFallback, getGoogleAuthUrl } from '@/lib/api';
 
 function isValidEmail(value: string): boolean {
@@ -19,9 +19,8 @@ function validateCredentials(creds: { username: string; email: string; password:
     if (!isLogin && creds.username.length < 3) return 'Username must be at least 3 characters.';
     if (!isLogin && !creds.email.trim()) return 'Email is required.';
     if (!isLogin && !isValidEmail(creds.email)) return 'Enter a valid email address.';
-    if (!creds.password.trim()) return 'Password is required.';
-    if (creds.password.length < 8) return 'Password must be at least 8 characters.';
-    if (/\s/.test(creds.password)) return 'Password cannot contain spaces.';
+    if (!creds.password) return 'Password is required.';
+    if (!isLogin && creds.password.length < 12) return 'Password must be at least 12 characters.';
     return '';
 }
 
@@ -31,25 +30,42 @@ export default function VaulticAuth() {
     const [creds, setCreds] = useState({ username: '', email: '', password: '' });
     const [statusMsg, setStatusMsg] = useState('');
     const [statusType, setStatusType] = useState<'info' | 'success' | 'error'>('info'); // 'info' is for loading messages
+    const [googleAuthConfigured, setGoogleAuthConfigured] = useState<boolean | null>(null);
     const router = useRouter();
 
     const setSessionAndRedirect = useCallback((token: string) => {
-        setCookie('session', token, 1);
+        setAuthToken(token, 1);
         router.push('/dashboard');
     }, [router]);
 
     useEffect(() => {
         if (typeof globalThis !== 'undefined' && globalThis.window) {
             const params = new URLSearchParams(globalThis.window.location.search);
-            const token = params.get('token');
+            const hashParams = new URLSearchParams(globalThis.window.location.hash.slice(1));
+            const token = hashParams.get('token');
             if (token) {
-                params.delete('token');
                 const newUrl = globalThis.window.location.pathname + (params.toString() ? `?${params.toString()}` : '');
                 globalThis.window.history.replaceState({}, globalThis.document.title, newUrl);
                 setSessionAndRedirect(token);
             }
         }
     }, [setSessionAndRedirect]);
+
+    useEffect(() => {
+        let active = true;
+        fetchApiWithFallback('/integrations/status')
+            .then(async (response) => {
+                if (!response.ok) throw new Error('Integration status unavailable');
+                return response.json();
+            })
+            .then((status) => {
+                if (active) setGoogleAuthConfigured(status.google_oauth_configured === true);
+            })
+            .catch(() => {
+                if (active) setGoogleAuthConfigured(false);
+            });
+        return () => { active = false; };
+    }, []);
 
     const handleToggleMode = () => {
         setIsLogin(!isLogin);
@@ -221,11 +237,12 @@ export default function VaulticAuth() {
 
                     <button
                         type="button"
-                        onClick={() => { globalThis.window.location.href = getGoogleAuthUrl(); }}
-                        className="vaultic-btn-secondary mt-2 w-full rounded-xl px-4 py-2.5 text-sm"
+                        disabled={googleAuthConfigured !== true}
+                        onClick={() => { if (googleAuthConfigured) globalThis.window.location.href = getGoogleAuthUrl(); }}
+                        className="vaultic-btn-secondary mt-2 w-full rounded-xl px-4 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-55"
                     >
                         <Image src="/google.svg" alt="Google" width={20} height={20} />
-                        Sign in with Google
+                        {googleAuthConfigured === null ? 'Checking Google sign-in…' : googleAuthConfigured ? 'Sign in with Google' : 'Google sign-in not configured'}
                     </button>
 
                     <div className="mt-4 border-t border-vaultic-border pt-3 text-center text-[10px] uppercase tracking-[0.18em] text-vaultic-muted">

@@ -41,32 +41,16 @@ export default function DashboardComposedChart() {
     const income = Number(dnaData.monthly_income) || 0;
     const expenses = Number(dnaData.fixed_expenses) || 0;
     const savings = getEffectiveSavingsAmount(dnaData);
-    return [
-      { name: 'Current', income, expenses, savings },
-      { name: 'Monthly +2%', income: Math.round(income * 1.02), expenses: Math.round(expenses * 1.01), savings: Math.round(savings * 1.05) },
-      { name: 'Monthly +4%', income: Math.round(income * 1.04), expenses: Math.round(expenses * 1.02), savings: Math.round(savings * 1.12) },
-      { name: 'Monthly +6%', income: Math.round(income * 1.06), expenses: Math.round(expenses * 1.03), savings: Math.round(savings * 1.2) },
-    ];
+    return [{ name: 'Current', income, expenses, savings }];
   }, [dnaData]);
 
-  const [liveChartData, setLiveChartData] = useState<any[]>(chartData.length ? chartData : []);
-
-  useEffect(() => {
-    setLiveChartData(chartData);
-    if (!chartData.length) return undefined;
-    const interval = setInterval(() => {
-      setLiveChartData((prev) => prev.map((point, idx) => ({ ...point, savings: Math.max(0, Math.round((point.savings || 0) * (1 + (Math.random() - 0.5) * 0.06))) })));
-    }, 1750);
-    return () => clearInterval(interval);
-  }, [chartData]);
-
-  if (!liveChartData.length) {
+  if (!chartData.length) {
     return <div className="h-[300px] flex items-center justify-center text-sm text-vaultic-muted">No data to chart</div>;
   }
 
   return (
     <Recharts.ResponsiveContainer width="100%" height="100%">
-      <Recharts.ComposedChart data={liveChartData} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
+      <Recharts.ComposedChart data={chartData} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
         <defs>
           <linearGradient id="savingsGradient" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#38BDF8" stopOpacity={0.35} />

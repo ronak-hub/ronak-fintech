@@ -19,8 +19,7 @@ passlib[bcrypt]==1.7.4
 PyJWT==2.13.0
 
 # API Integrations
-instructor==1.17.0
-google-generativeai==0.3.0
+requests>=2.31,<3.0
 
 # ML/NLP
 scikit-learn==1.3.2

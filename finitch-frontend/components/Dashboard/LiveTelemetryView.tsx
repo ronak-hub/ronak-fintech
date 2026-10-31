@@ -3,7 +3,8 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Wifi, WifiOff, AlertCircle, RefreshCw } from 'lucide-react';
-import { getAuthToken } from '@/lib/cookies';
+import { clearAuthToken, getAuthToken } from '@/lib/cookies';
+import { getTelemetryWebSocketUrl } from '@/lib/api';
 
 interface Transaction {
   id: number;
@@ -33,15 +34,8 @@ export default function LiveTelemetryView() {
   const websocketRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Extract user ID and token from localStorage
-  const getUserContext = useCallback(() => {
-    const token = getAuthToken();
-    // In production, extract user_id from token JWT payload
-    // For now, assuming user_id=1 (will be extracted from auth context)
-    const userId = 1;
-    return { token, userId };
-  }, []);
+  const connectWebSocketRef = useRef<() => void>(() => {});
+  const reconnectAttemptsRef = useRef(0);
 
   // Handle incoming transaction update
   function handleTransactionUpdate(transactionData: Transaction) {
@@ -73,7 +67,7 @@ export default function LiveTelemetryView() {
 
   // Initialize WebSocket connection
   const connectWebSocket = useCallback(() => {
-    const { token, userId } = getUserContext();
+    const token = getAuthToken();
 
     if (!token) {
       setSystemAlerts(['No authentication token found. Please login.']);
@@ -82,15 +76,13 @@ export default function LiveTelemetryView() {
 
     setConnectionStatus('connecting');
 
-    const apiBase = new URL(process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8001');
-    const wsProtocol = apiBase.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${apiBase.host}/api/v1/ws/telemetry/${userId}?token=${token}`;
-
     try {
-      const ws = new WebSocket(wsUrl);
+      const { url, protocols } = getTelemetryWebSocketUrl(token);
+      const ws = new WebSocket(url, protocols);
 
       ws.onopen = () => {
         console.log('✅ WebSocket connected');
+        reconnectAttemptsRef.current = 0;
         setConnectionStatus('connected');
         setIsConnected(true);
         setSystemAlerts([]);
@@ -133,20 +125,35 @@ export default function LiveTelemetryView() {
 
       ws.onerror = (error) => {
         console.error('WebSocket error:', error);
+        if (websocketRef.current !== ws) return;
         setConnectionStatus('disconnected');
         setIsConnected(false);
         setSystemAlerts(['WebSocket connection error occurred']);
       };
 
-      ws.onclose = () => {
+      ws.onclose = (event) => {
+        if (websocketRef.current !== ws) return;
         console.log('WebSocket disconnected');
         setConnectionStatus('disconnected');
         setIsConnected(false);
 
-        // Auto-reconnect after 5 seconds
+        if (event.code === 1008) {
+          clearAuthToken();
+          setSystemAlerts(['Your session is invalid or expired. Please sign in again.']);
+          return;
+        }
+        if (event.code === 1000) return;
+
+        if (reconnectAttemptsRef.current >= 5) {
+          setSystemAlerts(['Telemetry could not reconnect. Check your connection and retry later.']);
+          return;
+        }
+        reconnectAttemptsRef.current += 1;
         reconnectTimeoutRef.current = setTimeout(() => {
-          console.log('Attempting to reconnect...');
-        }, 5000);
+          if (websocketRef.current === ws && ws.readyState === WebSocket.CLOSED) {
+            connectWebSocketRef.current();
+          }
+        }, Math.min(5000 * reconnectAttemptsRef.current, 30000));
       };
 
       websocketRef.current = ws;
@@ -155,12 +162,12 @@ export default function LiveTelemetryView() {
       setConnectionStatus('disconnected');
       setIsConnected(false);
     }
-  }, [getUserContext]);
+  }, []);
 
   // Setup WebSocket connection on component mount
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    connectWebSocket();
+    connectWebSocketRef.current = connectWebSocket;
+    const frame = window.requestAnimationFrame(connectWebSocket);
 
     // Heartbeat interval to keep connection alive
     heartbeatIntervalRef.current = setInterval(() => {
@@ -172,7 +179,9 @@ export default function LiveTelemetryView() {
     return () => {
       // Cleanup on unmount
       if (websocketRef.current) {
-        websocketRef.current.close();
+        const websocket = websocketRef.current;
+        websocketRef.current = null;
+        websocket.close();
       }
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
@@ -180,6 +189,7 @@ export default function LiveTelemetryView() {
       if (heartbeatIntervalRef.current) {
         clearInterval(heartbeatIntervalRef.current);
       }
+      window.cancelAnimationFrame(frame);
     };
   }, [connectWebSocket]);
 

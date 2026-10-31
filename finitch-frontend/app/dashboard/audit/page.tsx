@@ -43,7 +43,7 @@ export default function WealthAuditPage() {
   };
 
   const expenseCategories = ['Rent', 'EMI', 'Insurance', 'Utilities', 'Groceries', 'Subscriptions', 'Travel', 'Misc'];
-  const parsedCategoryOptions = ['Food & Dining', 'Shopping', 'Transport & Fuel', 'Bills & Utilities', 'Entertainment', 'Healthcare', 'Investment', 'Other'];
+  const parsedCategoryOptions = ['Food & Dining', 'Shopping', 'Transport & Fuel', 'Bills & Utilities', 'Entertainment', 'Healthcare', 'Investment', 'Personal Transfer', 'Other'];
   const incentiveTypes = [
     { value: 'bonus', label: 'Bonus' },
     { value: 'profit', label: 'Profit' },
@@ -57,6 +57,7 @@ export default function WealthAuditPage() {
   const [extraExpenses, setExtraExpenses] = useState<ExtraExpense[]>([]);
   const [incentives, setIncentives] = useState<IncentiveEntry[]>([]);
   const [smsInput, setSmsInput] = useState("");
+  const [useGemini, setUseGemini] = useState(false);
   const [parsedTransactions, setParsedTransactions] = useState<ParsedTransaction[]>([]);
   const [parserBusy, setParserBusy] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
@@ -208,9 +209,9 @@ export default function WealthAuditPage() {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ raw_sms: rawSms }),
+            body: JSON.stringify({ raw_sms: rawSms, use_gemini: useGemini }),
           });
-          if (response.ok || response.status === 401 || response.status === 422 || response.status === 400) {
+          if (response.ok || response.status === 401 || response.status === 422 || response.status === 400 || response.status === 503) {
             break;
           }
         } catch (error) {
@@ -236,7 +237,7 @@ export default function WealthAuditPage() {
       setParsedTransactions(rows);
       setParserMessage({
         type: 'success',
-        text: `${rows.length} transaction${rows.length === 1 ? '' : 's'} extracted${result.failed_count ? `, ${result.failed_count} message${result.failed_count === 1 ? '' : 's'} skipped` : ''}.`,
+        text: `${rows.length} transaction${rows.length === 1 ? '' : 's'} extracted${result.failed_count ? `, ${result.failed_count} message${result.failed_count === 1 ? '' : 's'} skipped` : ''}${useGemini ? `; Gemini refined ${result.gemini_enhanced_count || 0}${result.gemini_failed_count ? ` (${result.gemini_failed_count} kept local results)` : ''}` : ''}.`,
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'SMS parsing failed. Try complete bank messages with amount and merchant details.';
@@ -531,6 +532,19 @@ export default function WealthAuditPage() {
                 placeholder="Paste your banking SMS messages here..."
                 className="vaultic-input min-h-56 w-full resize-y rounded-3xl p-5 text-sm leading-7 outline-none"
               />
+
+              <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-2xl border border-vaultic-border bg-vaultic-black/35 p-4">
+                <input
+                  type="checkbox"
+                  checked={useGemini}
+                  onChange={(event) => setUseGemini(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-vaultic-cyan"
+                />
+                <span>
+                  <span className="block text-xs font-bold text-vaultic-cream">Use optional Gemini enrichment</span>
+                  <span className="mt-1 block text-xs leading-5 text-vaultic-muted">When enabled, each detected SMS is sent to Google Gemini to refine merchant and category. Amount, date, and debit or credit type stay locally parsed. Review results before importing.</span>
+                </span>
+              </label>
 
               <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-[10px] uppercase tracking-[0.28em] text-vaultic-muted">

@@ -148,7 +148,7 @@ export default function DNACalibrator({ onComplete, initialStep }: Readonly<DNAC
             savingsAmount: monthlySavingValue,
             bankBalance: balanceValue,
             explicitGoal: Number(dna.goal_amount) || 0,
-            targetSavingsRate: Number.parseFloat(dna.target_savings_rate) || 0.3,
+            targetSavingsRate: savingsRate,
         });
 
     const addExpense = useCallback(() => {
@@ -166,9 +166,14 @@ export default function DNACalibrator({ onComplete, initialStep }: Readonly<DNAC
     const incomeValue = Number.parseFloat(dna.monthly_income) || 0;
     const balanceValue = Number.parseFloat(dna.bank_balance) || 0;
     const enteredSavingsValue = Number.parseFloat(dna.savings_amount) || 0;
-    // Determine monthly saving to display/use: if enteredSavingsValue <= income, it's monthly; otherwise fallback to rate-based monthly
-    const monthlySavingValue = enteredSavingsValue > 0 && enteredSavingsValue <= incomeValue ? enteredSavingsValue : Math.round(incomeValue * (Number.parseFloat(dna.target_savings_rate) || 0.3));
-    const savingsRatePercent = Math.round((Number.parseFloat(dna.target_savings_rate) || 0.3) * 100);
+    const enteredSavingsRate = Number.parseFloat(dna.target_savings_rate);
+    const savingsRate = Number.isFinite(enteredSavingsRate)
+        ? Math.min(1, Math.max(0, enteredSavingsRate))
+        : 0.3;
+    const monthlySavingValue = enteredSavingsValue > 0
+        ? enteredSavingsValue
+        : Math.round(incomeValue * savingsRate);
+    const savingsRatePercent = Math.round(savingsRate * 100);
     const totalFixedExpenses = expenses.reduce((sum, e) => sum + (Number.parseFloat(e.amount) || 0), 0);
     const monthlySurplus = Math.max(incomeValue - totalFixedExpenses, 0);
     const remainingAfterSavings = Math.max(incomeValue - monthlySavingValue, 0);
@@ -209,7 +214,7 @@ export default function DNACalibrator({ onComplete, initialStep }: Readonly<DNAC
                 monthly_income: incomeValue,
                 fixed_expenses: totalFixedExpenses,
                 bank_balance: balanceValue,
-                target_savings_rate: Number.parseFloat(dna.target_savings_rate) || 0.3,
+                target_savings_rate: savingsRate,
                 savings_amount: Number.parseFloat(dna.savings_amount) || 0,
                 primary_goal: primaryGoal,
                 goal_amount: goalPrediction.target,
@@ -493,10 +498,10 @@ export default function DNACalibrator({ onComplete, initialStep }: Readonly<DNAC
                                                                 (async () => {
                                                                     try {
                                                                         const payload = {
-                                                                            monthly_income: Number.parseFloat(updatedDna.monthly_income) || 0,
+                                                                            monthly_income: incomeValue,
                                                                             fixed_expenses: totalFixedExpenses,
-                                                                            bank_balance: Number.parseFloat(updatedDna.bank_balance) || 0,
-                                                                            target_savings_rate: Number.parseFloat(updatedDna.target_savings_rate) || 0.3,
+                                                                            bank_balance: balanceValue,
+                                                                            target_savings_rate: savingsRate,
                                                                             savings_amount: Number.parseFloat(updatedDna.savings_amount) || 0,
                                                                             primary_goal: updatedDna.primary_goal,
                                                                             goal_amount: p.target,

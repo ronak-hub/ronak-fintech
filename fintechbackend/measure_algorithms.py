@@ -82,7 +82,7 @@ def required_sip_reference(goal: float, years: int, current: float = 0.0, annual
     remaining = max(0.0, goal - future_of_current)
     if remaining <= 0:
         return 0.0
-    multiplier = (((1 + r) ** n - 1) / r) * (1 + r)
+    multiplier = ((1 + r) ** n - 1) / r
     return remaining / multiplier
 
 
@@ -98,7 +98,7 @@ def compute_required_sip_platform(goal: float, years: int, current: float = 0.0)
     remaining = max(0.0, goal_v - future_of_current)
     if remaining <= 0:
         return 0.0
-    compounding_multiplier = (((1 + r) ** n - 1) / r) * (1 + r)
+    compounding_multiplier = ((1 + r) ** n - 1) / r
     return round(remaining / compounding_multiplier, 2)
 
 
@@ -106,7 +106,7 @@ def investable_monthly(fix: Fixture, boost: float = 0.0) -> float:
     fixed = fix.rent + fix.emis + fix.insurance
     cash_available = max(0.0, fix.monthly_income - fixed)
     target_savings = fix.monthly_income * fix.target_savings_rate
-    return min(target_savings, cash_available) + boost
+    return min(cash_available, max(0.0, target_savings + boost))
 
 
 def freedom_projection_platform(fix: Fixture, boost: float = 0.0) -> tuple[str, float, int]:
@@ -138,7 +138,7 @@ def freedom_projection_platform(fix: Fixture, boost: float = 0.0) -> tuple[str, 
 def pulse_daily_limit(fix: Fixture, spent: float, day: int = 15, days_in_month: int = 30) -> float:
     days_left = days_in_month - day + 1
     fixed_costs = fix.rent + fix.emis + fix.insurance
-    investments = fix.monthly_income * fix.target_savings_rate
+    investments = min(max(0.0, fix.monthly_income - fixed_costs), max(0.0, fix.monthly_income * fix.target_savings_rate))
     safe_pool = fix.monthly_income - fixed_costs - investments - spent
     daily_limit = safe_pool / days_left if days_left > 0 else 0
     return round(max(0, daily_limit), 2)

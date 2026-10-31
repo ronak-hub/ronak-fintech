@@ -96,34 +96,40 @@ export function getEffectiveSavingsAmount(data?: WizardDataInput): number {
 
   if (savingsAmountValue !== '') {
     const explicitSavings = Number(savingsAmountValue);
-    if (!Number.isNaN(explicitSavings)) {
-      return explicitSavings;
+    if (Number.isFinite(explicitSavings)) {
+      return Math.max(0, explicitSavings);
     }
   }
 
-  const rate = Number(data?.target_savings_rate);
-  return Math.round(income * (rate > 0 ? rate : 0.3));
+  const rateValue = data?.target_savings_rate;
+  const rate = rateValue === undefined || rateValue === null || String(rateValue).trim() === ''
+    ? 0.3
+    : Number(rateValue);
+  return Math.round(Math.max(0, income) * (Number.isFinite(rate) ? Math.min(1, Math.max(0, rate)) : 0.3));
 }
 
-/** SIP needed so existing capital + monthly contributions reach `goal`. */
+/** End-of-month SIP needed so existing capital + monthly contributions reach `goal`. */
 export function computeRequiredSip(
   goal: number,
   years: number,
   currentCapital = 0,
   annualReturn = 0.12,
 ): number {
-  const r = annualReturn / 12;
-  const n = Math.max(1, years * 12);
-  const principal = Math.max(0, currentCapital);
+  const safeGoal = Number.isFinite(goal) ? Math.max(0, goal) : 0;
+  const safeYears = Number.isFinite(years) ? Math.max(1, Math.floor(years * 12)) : 1;
+  const safeReturn = Number.isFinite(annualReturn) ? annualReturn : 0.12;
+  const r = safeReturn / 12;
+  const n = safeYears;
+  const principal = Number.isFinite(currentCapital) ? Math.max(0, currentCapital) : 0;
   const futureOfPrincipal = principal * ((1 + r) ** n);
-  const remaining = Math.max(0, goal - futureOfPrincipal);
+  const remaining = Math.max(0, safeGoal - futureOfPrincipal);
   if (remaining <= 0) {
     return 0;
   }
   if (r === 0) {
     return Math.round(remaining / n);
   }
-  const multiplier = (((1 + r) ** n - 1) / r) * (1 + r);
+  const multiplier = ((1 + r) ** n - 1) / r;
   return Math.round(remaining / multiplier);
 }
 
@@ -137,19 +143,23 @@ export function computeFinancialFreedomTarget(params: {
 }): number {
   const monthlyIncome = Math.max(0, params.monthlyIncome);
   const fixedExpenses = Math.max(0, params.fixedExpenses);
-  const rate = params.targetSavingsRate ?? 0.3;
-  const savings =
-    params.savingsAmount && params.savingsAmount > 0 && params.savingsAmount <= monthlyIncome
-      ? params.savingsAmount
-      : Math.round(monthlyIncome * rate);
+  const rateValue = params.targetSavingsRate;
+  const rate = rateValue === undefined || !Number.isFinite(rateValue)
+    ? 0.3
+    : Math.min(1, Math.max(0, rateValue));
+  const savings = params.savingsAmount !== undefined && Number.isFinite(params.savingsAmount) && params.savingsAmount > 0
+    ? params.savingsAmount
+    : Math.round(monthlyIncome * rate);
   const wealthThreshold = Math.max(monthlyIncome * 24, 500000);
-  const explicit = params.explicitGoal ?? 0;
+  const explicit = Number.isFinite(params.explicitGoal) ? params.explicitGoal! : 0;
 
   if (explicit >= wealthThreshold) {
     return explicit;
   }
 
-  const monthlyOutflow = fixedExpenses + savings;
+  const availableAfterFixed = Math.max(0, monthlyIncome - fixedExpenses);
+  const plannedSavings = Math.min(availableAfterFixed, Math.max(0, savings));
+  const monthlyOutflow = Math.max(fixedExpenses, monthlyIncome - plannedSavings);
   const fiTarget = Math.round((monthlyOutflow * 12) / 0.06);
   return fiTarget > 0 ? fiTarget : 50000000;
 }
@@ -168,10 +178,13 @@ export function computeGoalPrediction(
   },
 ): GoalPrediction {
   const income = Math.max(0, params.monthlyIncome);
-  const savingsAmount =
-    params.savingsAmount > 0 && params.savingsAmount <= income
-      ? params.savingsAmount
-      : Math.round(income * (params.targetSavingsRate ?? 0.3));
+  const requestedRate = params.targetSavingsRate;
+  const savingsRate = requestedRate === undefined || !Number.isFinite(requestedRate)
+    ? 0.3
+    : Math.min(1, Math.max(0, requestedRate));
+  const savingsAmount = Number.isFinite(params.savingsAmount) && params.savingsAmount > 0
+    ? params.savingsAmount
+    : Math.round(income * savingsRate);
   const balance = Math.max(0, params.bankBalance);
   let target = 0;
   let years = 10;

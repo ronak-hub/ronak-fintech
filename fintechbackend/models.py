@@ -86,19 +86,19 @@ class SMSInput(BaseModel):
     bank_name: Optional[str] = "Detected Core"
 
 class PlanInput(BaseModel):
-    income: float
-    goal_amount: float
-    years: int
-    goal_name: str
+    income: float = Field(ge=0)
+    goal_amount: float = Field(ge=0)
+    years: int = Field(gt=0, le=100)
+    goal_name: str = Field(min_length=1, max_length=120)
 
 class ProfileUpdate(BaseModel):
-    monthly_income: float
-    fixed_expenses: float 
-    bank_balance: float
-    target_savings_rate: float
-    primary_goal: str
-    goal_amount: float
-    savings_amount: Optional[float] = None
+    monthly_income: float = Field(ge=0)
+    fixed_expenses: float = Field(ge=0)
+    bank_balance: float = Field(ge=0)
+    target_savings_rate: float = Field(ge=0, le=1)
+    primary_goal: str = Field(min_length=1, max_length=120)
+    goal_amount: float = Field(ge=0)
+    savings_amount: Optional[float] = Field(default=None, ge=0)
     expenses: Optional[List[dict]] = None
     wizard_step: Optional[int] = None
 

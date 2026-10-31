@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { isProtectedRoute, isPublicRoute } from '@/lib/routes';
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const sessionCookie = request.cookies.get('session')?.value;
 

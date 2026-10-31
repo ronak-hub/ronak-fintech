@@ -9,14 +9,6 @@ const PieGoalChart = dynamic(() => import('@/components/graphs/PieGoalChart'), {
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { getEffectiveSavingsAmount, readStoredWizardData } from '@/lib/finance';
 
-const fallbackData = [
-  { name: 'Jan', income: 120000, expenses: 76000, savings: 22000 },
-  { name: 'Feb', income: 130000, expenses: 82000, savings: 25000 },
-  { name: 'Mar', income: 128000, expenses: 79000, savings: 24000 },
-  { name: 'Apr', income: 138000, expenses: 85000, savings: 28000 },
-  { name: 'May', income: 145000, expenses: 90000, savings: 30000 },
-];
-
 const COLORS = ['#F59E0B', '#22C55E', '#38BDF8', '#A78BFA', '#F97316'];
 
 type DnaExpense = { id: string; category: string; amount: string | number };
@@ -79,35 +71,12 @@ export default function DashboardGraphs() {
   }, [dnaData]);
 
   const chartData = useMemo(() => {
-    if (!dnaData) return fallbackData;
+    if (!dnaData) return [];
     const income = Number(dnaData.monthly_income) || 0;
     const expenses = Number(dnaData.fixed_expenses) || 0;
     const savings = getEffectiveSavingsAmount(dnaData);
-    return [
-      { name: 'Current', income, expenses, savings },
-      { name: 'Monthly +2%', income: Math.round(income * 1.02), expenses: Math.round(expenses * 1.01), savings: Math.round(savings * 1.05) },
-      { name: 'Monthly +4%', income: Math.round(income * 1.04), expenses: Math.round(expenses * 1.02), savings: Math.round(savings * 1.12) },
-      { name: 'Monthly +6%', income: Math.round(income * 1.06), expenses: Math.round(expenses * 1.03), savings: Math.round(savings * 1.2) },
-    ];
+    return [{ name: 'Current', income, expenses, savings }];
   }, [dnaData]);
-
-  const [liveChartData, setLiveChartData] = useState(chartData);
-
-  useEffect(() => {
-    setLiveChartData(chartData);
-    if (chartData.length === 0) return undefined;
-
-    const interval = setInterval(() => {
-      setLiveChartData(
-        chartData.map((point) => ({
-          ...point,
-          savings: Math.max(0, Math.round(point.savings * (1 + (Math.random() - 0.5) * 0.06))),
-        })),
-      );
-    }, 1750);
-
-    return () => clearInterval(interval);
-  }, [chartData]);
 
   const income = Number(dnaData?.monthly_income) || 0;
   const fixedExpenses = Number(dnaData?.fixed_expenses) || 0;

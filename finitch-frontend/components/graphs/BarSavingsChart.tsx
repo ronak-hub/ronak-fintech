@@ -6,6 +6,10 @@ import * as Recharts from 'recharts';
 type Props = { data: any };
 
 export default function BarSavingsChart({ data }: Props) {
+  if (!Array.isArray(data) || data.length === 0) {
+    return <div className="flex h-full items-center justify-center text-sm text-vaultic-muted">Add your income and savings to view this chart.</div>;
+  }
+
   return (
     <Recharts.ResponsiveContainer width="100%" height="100%">
       <Recharts.BarChart data={data} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>

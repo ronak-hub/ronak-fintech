@@ -7,14 +7,15 @@ export function getCookie(name: string): string {
 
 export function setCookie(name: string, value: string, days = 1): void {
   if (typeof document === 'undefined') return;
-  const expires = new Date();
-  expires.setTime(expires.getTime() + days * 24 * 60 * 60 * 1000);
-  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires.toUTCString()}; path=/; SameSite=Lax`;
+  const maxAge = Math.max(0, Math.floor(days * 24 * 60 * 60));
+  const secure = globalThis.location?.protocol === 'https:' ? '; Secure' : '';
+  document.cookie = `${name}=${encodeURIComponent(value)}; Max-Age=${maxAge}; Path=/; SameSite=Strict${secure}`;
 }
 
 export function deleteCookie(name: string): void {
   if (typeof document === 'undefined') return;
-  document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
+  const secure = globalThis.location?.protocol === 'https:' ? '; Secure' : '';
+  document.cookie = `${name}=; Max-Age=0; Path=/; SameSite=Strict${secure}`;
 }
 
 export function getAuthToken(): string {

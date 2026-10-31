@@ -2,7 +2,7 @@
 
 > A modern financial decision intelligence platform built with Next.js, React, FastAPI, and SQLAlchemy.
 
-**Status:** ✅ Fully Functional & Production-Ready  
+**Status:** Launch preparation; production deployment and security certification are not complete.  
 **Last Updated:** 2026-06-19  
 **Version:** 1.0.0
 
@@ -48,7 +48,7 @@ The application combines a modern, responsive frontend with a high-performance a
 - ✅ Password hashing using bcrypt (10 rounds)
 - ✅ User registration with email validation
 - ✅ Automatic logout on token expiration
-- ✅ localStorage token persistence
+- ✅ Browser session token cookie (JavaScript-readable; use only with trusted frontend code)
 
 ### Dashboard
 - ✅ **Financial Profile Cards** - Monthly income, fixed expenses, bank balance, savings target
@@ -185,18 +185,22 @@ This app is prepared for a public production deployment with a separate frontend
 1. Deploy the backend on Render using the included `render.yaml` file.
 2. Set these environment variables on Render:
    - `DATABASE_URL`
-   - `SECRET_KEY`
-   - `VAULTIC_SECRET_KEY`
+   - `SECRET_KEY` (Render-generated, unique and at least 32 characters)
    - `VAULTIC_WEBHOOK_SECRET`
-   - `CORS_ORIGINS=https://your-app.vercel.app`
+   - `CORS_ORIGINS` set to the exact HTTPS Vercel origin
+   - `FRONTEND_BASE_URL` set to the same HTTPS frontend origin
    - `ENVIRONMENT=production`
+   - Optional Google sign-in: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and
+     `GOOGLE_REDIRECT_URI` set to the exact HTTPS backend callback URL registered
+     in Google Cloud Console (`https://your-backend-url.onrender.com/auth/google/callback`)
+   - Optional Gemini enrichment: `GOOGLE_API_KEY` (Wealth Audit sends SMS text only when a user explicitly opts in)
 3. Deploy the frontend on Vercel from the `finitch-frontend` folder.
 4. In Vercel, set:
    - `NEXT_PUBLIC_API_BASE_URL=https://your-backend-url.onrender.com`
-   - optional Firebase variables if you want push + auth
+   - Firebase web config is currently informational only; Firebase Auth, push notifications, and Storage are not integrated
 5. Redeploy both services after setting all variables.
 
-This keeps the app publicly reachable without requiring a local machine to stay running.
+Production startup requires PostgreSQL, a valid HTTPS frontend origin, and a strong signing secret. Browser file selection does not upload files or grant persistent gallery access. Bank connections are not implemented. This deployment checklist is not a security certification or a guarantee that the application is free of defects.
 
 ### 5-Minute Setup
 
@@ -682,13 +686,13 @@ This project demonstrates:
 - ✅ Type-safe development
 - ✅ Performance optimization
 - ✅ Responsive design
-- ✅ Production-ready code
+- ✅ Production deployment configuration documented (deployment still requires provider setup and validation)
 
 **Perfect for: Academic review, portfolio, technical interviews, learning**
 
 ---
 
-**Status:** ✅ Complete & Production-Ready  
+**Status:** Development complete; production readiness depends on deployment configuration, integration work, and independent testing.  
 **Last Updated:** 2026-06-19  
 **Version:** 1.0.0  
 **All Systems:** Operational 🚀

@@ -20,6 +20,8 @@ def get_engine():
     For SQLite: Uses StaticPool for development.
     """
     database_url = settings.DATABASE_URL
+    if database_url.startswith("postgres://"):
+        database_url = "postgresql://" + database_url.removeprefix("postgres://")
     
     if database_url.startswith("postgresql://") or database_url.startswith("postgresql+psycopg2://"):
         # PostgreSQL configuration with connection pooling

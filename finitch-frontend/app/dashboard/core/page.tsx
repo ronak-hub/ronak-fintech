@@ -26,6 +26,7 @@ interface OptimizationResult {
   years_of_freedom_gained: number;
   new_exit_date: string;
   baseline_exit_date: string;
+  projection_available?: boolean;
   suggestions: OptimizationSuggestion[];
 }
 
@@ -75,13 +76,13 @@ export default function CapitalOptimizationCenter() {
     const suggestions: OptimizationSuggestion[] = [];
 
     if (fixedOutflow > 0) {
-      const fixedReduction = Math.max(1000, Math.round(fixedOutflow * 0.12));
+      const fixedReduction = Math.min(fixedOutflow, Math.max(1000, Math.round(fixedOutflow * 0.12)));
       suggestions.push({
         category: 'Fixed commitments',
         current_spending: fixedOutflow,
         suggested_reduction: fixedReduction,
         target_spending: Math.max(0, fixedOutflow - fixedReduction),
-        reduction_percentage: 12,
+        reduction_percentage: Math.round((fixedReduction / fixedOutflow) * 100),
         monthly_savings: fixedReduction,
         annual_savings: fixedReduction * 12,
         implementation_difficulty: 'easy',
@@ -89,30 +90,16 @@ export default function CapitalOptimizationCenter() {
     }
 
     if (discretionarySpend > 0) {
-      const lifestyleReduction = Math.max(1000, Math.round(discretionarySpend * 0.18));
+      const lifestyleReduction = Math.min(discretionarySpend, Math.max(1000, Math.round(discretionarySpend * 0.18)));
       suggestions.push({
         category: 'Lifestyle leakage',
         current_spending: discretionarySpend,
         suggested_reduction: lifestyleReduction,
         target_spending: Math.max(0, discretionarySpend - lifestyleReduction),
-        reduction_percentage: 18,
+        reduction_percentage: Math.round((lifestyleReduction / discretionarySpend) * 100),
         monthly_savings: lifestyleReduction,
         annual_savings: lifestyleReduction * 12,
         implementation_difficulty: 'medium',
-      });
-    }
-
-    if (suggestions.length < 2) {
-      const genericReduction = Math.max(1000, Math.round((currentSpending || 12000) * 0.1));
-      suggestions.push({
-        category: 'Automation sweep',
-        current_spending: currentSpending || 12000,
-        suggested_reduction: genericReduction,
-        target_spending: Math.max(0, (currentSpending || 12000) - genericReduction),
-        reduction_percentage: 10,
-        monthly_savings: genericReduction,
-        annual_savings: genericReduction * 12,
-        implementation_difficulty: 'easy',
       });
     }
 
@@ -125,9 +112,10 @@ export default function CapitalOptimizationCenter() {
       total_optimized_spending: Math.max(0, totalOptimizedSpending),
       total_monthly_savings: totalMonthlySavings,
       total_annual_savings: totalMonthlySavings * 12,
-      years_of_freedom_gained: Math.max(0.2, totalMonthlySavings / 12000),
-      new_exit_date: `~${Math.max(1, Math.round(12 - (totalMonthlySavings / 12000)))} months faster`,
+      years_of_freedom_gained: 0,
+      new_exit_date: 'Unavailable in local preview',
       baseline_exit_date: 'Current plan',
+      projection_available: false,
       suggestions,
     };
   }, [incentivesTotal, wizardData]);
@@ -180,7 +168,7 @@ export default function CapitalOptimizationCenter() {
         if (response.ok) {
           const data = await response.json();
           if (data?.suggestions?.length) {
-            setResult(data);
+            setResult({ ...data, projection_available: true });
             setSelectedCategories(new Set(data.suggestions.map((s: OptimizationSuggestion) => s.category)));
           } else {
             const fallbackResult = buildFallbackOptimization();
@@ -212,14 +200,19 @@ export default function CapitalOptimizationCenter() {
     const suggestions = baseResult.suggestions.map((suggestion) => {
       const isSelected = selectedNames.length === 0 || selectedNames.includes(suggestion.category);
       const multiplier = isSelected ? 1.18 : 0.82;
-      const monthlySavings = Math.max(600, Math.round(suggestion.monthly_savings * multiplier));
+      const monthlySavings = Math.min(
+        suggestion.current_spending,
+        Math.max(0, Math.round(suggestion.monthly_savings * multiplier)),
+      );
       const targetSpending = Math.max(0, suggestion.current_spending - monthlySavings);
       return {
         ...suggestion,
         target_spending: targetSpending,
         monthly_savings: monthlySavings,
         annual_savings: monthlySavings * 12,
-        reduction_percentage: Math.min(35, Math.round(suggestion.reduction_percentage * multiplier)),
+        reduction_percentage: suggestion.current_spending > 0
+          ? Math.round((monthlySavings / suggestion.current_spending) * 100)
+          : 0,
       };
     });
 
@@ -231,8 +224,9 @@ export default function CapitalOptimizationCenter() {
       total_optimized_spending: suggestions.reduce((sum, item) => sum + item.target_spending, 0),
       total_monthly_savings: totalMonthlySavings,
       total_annual_savings: totalMonthlySavings * 12,
-      years_of_freedom_gained: Math.max(0.3, totalMonthlySavings / 12000),
-      new_exit_date: `~${Math.max(1, Math.round(12 - Math.min(9, totalMonthlySavings / 12000)))} months faster`,
+      years_of_freedom_gained: 0,
+      new_exit_date: 'Unavailable in local preview',
+      projection_available: false,
     };
   }, [buildFallbackOptimization]);
 
@@ -388,8 +382,8 @@ export default function CapitalOptimizationCenter() {
                 className="min-w-0 bg-gradient-to-br from-vaultic-mint/15 to-vaultic-orange/15 border border-vaultic-mint/30 p-6 sm:p-8 rounded-2xl min-h-[14rem]"
               >
                 <p className="text-[9px] font-mono tracking-widest text-vaultic-mint uppercase mb-3">Freedom Years Gained</p>
-                <p className="text-5xl font-black text-vaultic-mint">{result.years_of_freedom_gained.toFixed(1)}</p>
-                <p className="text-vaultic-muted text-xs mt-3">Years of financial independence purchased back through optimization</p>
+                <p className="text-5xl font-black text-vaultic-mint">{result.projection_available === false ? '—' : result.years_of_freedom_gained.toFixed(1)}</p>
+                <p className="text-vaultic-muted text-xs mt-3">{result.projection_available === false ? 'A timeline estimate needs the backend projection engine.' : 'Estimated years gained from the optimization plan.'}</p>
               </motion.div>
             </div>
 
