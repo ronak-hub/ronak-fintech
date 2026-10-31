@@ -202,6 +202,7 @@ The backend `/health` endpoint has been verified to report PostgreSQL connected.
 4. In Vercel, set:
    - `NEXT_PUBLIC_API_BASE_URL=https://your-backend-url.onrender.com`
    - Firebase web config is currently informational only; Firebase Auth, push notifications, and Storage are not integrated
+   - Optional contact-form email: set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, and `SMTP_PASS`; optionally set `SMTP_SECURE`, `SMTP_FROM`, and `CONTACT_ADMIN_EMAIL`. Keep mail credentials in Vercel environment variables, never in source control. The contact endpoint returns 503 until SMTP is configured.
 5. Redeploy both services after setting all variables.
 
 Production startup requires PostgreSQL, a valid HTTPS frontend origin, and a strong signing secret. Browser file selection does not upload files or grant persistent gallery access. Bank connections are not implemented. This deployment checklist is not a security certification or a guarantee that the application is free of defects.
