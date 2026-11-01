@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from jose import jwt, JWTError
+import jwt
 from passlib.context import CryptContext
 from config import settings
 
@@ -33,10 +33,11 @@ def verify_token(token: str):
             SECRET_KEY,
             algorithms=[ALGORITHM],
             issuer=TOKEN_ISSUER,
+            options={"require": ["exp", "iss", "sub"]},
         )
         username: str = payload.get("sub")
         if username is None:
             return None
         return username
-    except JWTError:
+    except jwt.InvalidTokenError:
         return None

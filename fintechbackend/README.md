@@ -1,325 +1,37 @@
-# Vaultic Backend
+# VAULTIC API
 
-This is the FastAPI backend for Vaultic. It owns authentication, database access, dashboard analytics, transaction ingestion, SMS parsing, goal planning, stress testing, and WebSocket support.
+FastAPI service for identity, user profile, planning projections, transaction parsing/import, analytics, integrations, and authenticated WebSocket telemetry. Route definitions and actual response shapes in `main.py` are authoritative.
 
-## Stack
+## Stack and request flow
 
-| Tool | Role |
-| --- | --- |
-| FastAPI | HTTP API and automatic Swagger docs |
-| SQLModel | Database tables and ORM sessions |
-| SQLAlchemy | Query engine underneath SQLModel |
-| Pydantic | Request and response validation |
-| Uvicorn | ASGI server |
-| python-jose | JWT validation |
-| bcrypt/passlib | Password hashing |
-| SQLite/PostgreSQL | Local and production persistence |
+Python 3.12 runs FastAPI on Uvicorn. Pydantic validates HTTP inputs; SQLModel (built on SQLAlchemy) maps models and sessions to SQLite locally or PostgreSQL in production. `main.py` composes routes and middleware. `config.py` loads environment-backed settings and rejects unsafe production configuration. `auth.py` hashes passwords and signs JWTs with PyJWT. `security.py` validates required JWT claims and supplies user/role dependencies. `parser.py` and `nlp_parser.py` provide optional SMS parsing helpers; `stress_tester.py` contains planning simulations. `websocket_routes.py` and `websocket_manager.py` implement telemetry connections.
 
-## Important Files
+Typical request path: browser sends JSON and a bearer token → FastAPI validates the model and authentication dependency → route reads/writes through a SQLModel session → JSON response is rendered by the frontend. Parser/Google integrations are optional and require server-side credentials.
 
-```text
-main.py                 FastAPI app, routes, analytics, parser endpoints
-models.py               SQLModel tables and request models
-database_new.py         Engine, sessions, startup lifecycle
-auth.py                 Password hashing and JWT creation
-security.py             Auth dependency helpers and role checks
-config.py               Environment-driven settings
-nlp_parser.py           Optional parser support and merchant classification helpers
-parser.py               AI/parser wrapper with fallback behavior
-stress_tester.py        Wealth stress simulation logic
-websocket_manager.py    WebSocket connection management
-websocket_routes.py     WebSocket routes
-seed_test_data.py       Test/demo data seeding
-seed_rbac.py            Admin/user role seeding
-```
-
-## Data Model
-
-Models live in `models.py`.
-
-| Model | Purpose |
-| --- | --- |
-| `User` | Login identity, role, income, expenses, balance, savings rate, goal metadata |
-| `Transaction` | Expense ledger used by every analytics module |
-| `Goal` | User financial goals and required SIP |
-| `UserProfileSnapshot` | Serialized onboarding payload |
-| `DailySnapshot` | Daily budget/spend tracking |
-
-The `Transaction` table is the shared expense storage. Do not create a separate database for imported transactions unless the product requirements change.
-
-## Request Flow
-
-```text
-Frontend fetch
-  |
-  v
-FastAPI route in main.py
-  |
-  v
-get_current_user() validates JWT
-  |
-  v
-get_session() opens SQLModel session
-  |
-  v
-Route reads/writes User, Transaction, Goal, snapshots
-  |
-  v
-JSON response returns to frontend
-```
-
-## Authentication And RBAC
-
-- `POST /auth/signup` creates users.
-- `POST /auth/login` verifies password and returns a JWT.
-- New signup passwords require at least 12 characters and are limited to bcrypt's 72-byte input limit; existing users may continue signing in with previously accepted passwords.
-- Protected routes depend on `get_current_user`.
-- JWT `sub` is matched against username or email.
-- `User.role` supports role-based access.
-- `require_roles(...)` restricts admin routes.
-- The telemetry WebSocket derives the user from a verified JWT subprotocol; it does not accept a client-selected user ID.
-- The browser stores its JWT in a JavaScript-readable cookie. `Secure` is added on HTTPS and `SameSite=Strict` is used, but this is not HttpOnly and remains exposed to XSS.
-
-## Production and integration limits
-
-- Production startup rejects SQLite, non-HTTPS frontend/CORS origins, and weak signing secrets. Use a managed PostgreSQL provider with its TLS and at-rest encryption controls enabled.
-- The SMS webhook requires a configured secret and an explicit target user ID. Its secret is a service credential; keep it private and rotate it if exposed.
-- File selection is browser-local only; no upload or persistent gallery permission is implemented.
-- Firebase environment values only configure the web client. Firebase Authentication, push notifications, and Storage are not integrated.
-- Google OAuth is an optional sign-in provider. Gemini SMS enrichment is a separate, optional feature with per-request user opt-in; local SMS parsing works without Google credentials.
-- Bank/account-aggregator connections and application-level database encryption are not implemented. Do not treat this project as certified or immune to attack.
-
-Seed admin/user roles:
+## Run locally
 
 ```powershell
-cd "D:\final vault\VAULTIC\fintechbackend"
-$env:ADMIN_USERNAME = "admin"
-$env:ADMIN_PASSWORD = "StrongPass123"
-python seed_rbac.py
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+Copy-Item .env.example .env
+uvicorn main:app --reload --host 127.0.0.1 --port 8001
 ```
 
-## Core Endpoints
+Set `DATABASE_URL=sqlite:///./finova_core.db` for local SQLite. The interactive docs are at `/docs` while debug mode is enabled. For Docker Compose, copy the root and backend env templates first; Compose uses PostgreSQL and binds development ports to localhost.
 
-| Endpoint | Purpose |
-| --- | --- |
-| `POST /auth/signup` | Register identity |
-| `POST /auth/login` | Login and receive JWT |
-| `POST /user/setup` | Store onboarding profile and goal setup |
-| `GET /dashboard/summary` | Main dashboard payload |
-| `GET /analytics/transactions` | Transaction history and total volume |
-| `GET /analytics/optimize` | Optimization suggestions |
-| `POST /analytics/execute-optimization` | Optimization action event |
-| `POST /analytics/nlp-train` | Train parser/merchant recognition from user history |
-| `POST /analytics/sms-ingest` | Existing single SMS transaction ingestion |
-| `POST /api/parse-sms` | Batch parse pasted banking SMS history |
-| `POST /api/import-sms-transactions` | Import selected parsed transactions |
-| `POST /simulate/trajectory` | Freedom projection with boost |
-| `POST /simulate/stress-test` | Stress scenario simulation |
-| `POST /simulate/plan` | Goal plan and required SIP calculation |
-| `POST /api/v1/telemetry/sms-webhook` | Automated SMS webhook path |
+## Configuration
 
-## SMS Parser Architecture
+See `.env.example` for the variable list. Important values: `DATABASE_URL`, `SECRET_KEY` (or `VAULTIC_SECRET_KEY`), `ENVIRONMENT`, `DEBUG_MODE`, `CORS_ORIGINS`, `FRONTEND_BASE_URL`, and optional Google OAuth/Gemini/webhook settings. Production startup requires PostgreSQL, a unique 32+ character signing secret, HTTPS frontend and CORS origins, a matching CORS/frontend origin, HS256, debug disabled, and a token lifetime no longer than 24 hours. Keep secrets in the hosting secret store. Do not commit `.env` files, database files, private keys, or model artifacts containing user data.
 
-The parser is part of Wealth Audit and writes into the same `Transaction` table as the rest of Vaultic.
+## API map
 
-### Parse Endpoint
+The API prefix defaults to `/api/v1` for versioned service routes; authentication routes also include `/auth/*`. The implementation includes signup/login and optional Google OAuth, profile/dashboard endpoints, planning/simulation, SMS parsing and import, analytics, integration status, and WebSocket telemetry. `/health` is the service health endpoint. Inspect `/openapi.json` or `/docs` in development for the precise current method, schema, and response.
 
-`POST /api/parse-sms`
+## Security boundaries
 
-Request:
-
-```json
-{
-  "raw_sms": "Rs.1200 debited at Swiggy\nINR 540 paid to Uber"
-}
-```
-
-Response:
-
-```json
-{
-  "status": "success",
-  "transactions": [
-    {
-      "merchant": "Swiggy",
-      "amount": 1200,
-      "category": "Food & Dining",
-      "date": "2026-07-07",
-      "transaction_type": "Debit",
-      "mode": "Bank Transaction",
-      "source_text": "Rs.1200 debited at Swiggy"
-    }
-  ],
-  "failed_count": 0,
-  "warnings": []
-}
-```
-
-The parser extracts amount, merchant, transaction type, category, date, payment mode, and source text.
-
-Supported modes/signals:
-
-- UPI
-- Debit Card
-- Credit Card
-- ATM Withdrawal
-- Net Banking
-- Wallet
-- IMPS
-- NEFT
-- RTGS
-
-Merchant categories:
-
-- Food & Dining: Swiggy, Zomato, McDonald's, Domino's
-- Shopping: Amazon, Flipkart, Myntra, Reliance Digital, Zara
-- Transport & Fuel: Uber, Ola, Rapido
-- Bills & Utilities: Airtel, Jio, BSNL, electricity, water
-- Entertainment: Netflix, Spotify, Prime Video
-- Healthcare: Apollo, PharmEasy, Tata 1mg
-- Investment: Zerodha, Groww, Upstox
-- Other: fallback
-
-### Import Endpoint
-
-`POST /api/import-sms-transactions`
-
-Behavior:
-
-1. Rejects empty import requests.
-2. Skips invalid amounts.
-3. Skips credit transactions because the current `Transaction` model is an expense ledger.
-4. Checks duplicates by user, amount, merchant, category, and transaction date.
-5. Inserts valid rows into `Transaction`.
-6. Deducts imported expense total from `User.current_bank_balance`.
-7. Recomputes the financial destiny summary.
-8. Existing dashboard endpoints automatically reflect the new ledger.
-
-## Dashboard Summary Calculation
-
-`GET /dashboard/summary` gathers user profile, recent transactions, spending by category, goals, safe daily budget, freedom projection, lazy cash leak, financial health score, generated nudges, and destiny summary text.
-
-This route is the main synchronization point for Overview, Freedom, Leaks, and Core Engine surfaces.
-
-## Running Locally
-
-Install dependencies:
-
-```powershell
-cd "D:\final vault\VAULTIC\fintechbackend"
-pip install -r requirements.txt
-```
-
-Run on default port:
-
-```powershell
-python -B main.py
-```
-
-Run on alternate port:
-
-```powershell
-$env:API_PORT = "8002"
-python -B main.py
-```
-
-Open docs at `http://127.0.0.1:8001/docs` or `http://127.0.0.1:8002/docs`.
-
-## Environment
-
-Common variables:
-
-```text
-SECRET_KEY=change-me
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_HOURS=24
-API_V1_PREFIX=/api/v1
-CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
-DATABASE_URL=postgresql://user:password@localhost:5432/vaultic
-API_PORT=8001
-```
-
-Keep real secrets out of git.
-
-### Google sign-in
-
-Google sign-in is optional. In Google Cloud Console, configure an OAuth client
-of type **Web application**, add your frontend origin to **Authorized JavaScript
-origins**, and add the backend callback to **Authorized redirect URIs**. Set
-`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI` in the
-backend environment. Keep local credentials in the ignored `fintechbackend/.env.local`
-file, not the tracked `.env`. For local development with the supplied port mapping, use
-`http://127.0.0.1:8001/auth/google/callback`; in production use the exact HTTPS
-backend callback URL. The sign-in flow uses state and PKCE cookies and requests
-only the OpenID Connect `openid email profile` scopes. It does not retain Google
-access or refresh tokens. Without these credentials, password sign-in continues
-to work and Google sign-in reports that it is not configured.
-
-The Wealth Audit parser uses Gemini only when a signed-in user checks **Use
-optional Gemini enrichment**. This sends each detected SMS to Google to refine
-the merchant and category; amount, date, and debit/credit type remain locally
-parsed. The key is optional, requests are limited to 20 detected transactions,
-and failures keep the local result. Add `GOOGLE_API_KEY` to the ignored
-`fintechbackend/.env.local` file to enable it. The SMS
-text is not sent to Google unless the user opts in. The backend uses Google's
-structured `generateContent` REST endpoint; it does not require an extra Google
-SDK. `GEMINI_MODEL_NAME` defaults to `gemini-3.8-flash` and can be overridden.
-
-### PostgreSQL connectivity
-
-Local development defaults to SQLite. For PostgreSQL, set `DATABASE_URL` to a
-SQLAlchemy PostgreSQL URL, for example
-`postgresql://vaultic_user:your-password@localhost:5432/vaultic_db`; the backend
-checks connectivity at startup and `/health` returns HTTP 503 when the database
-cannot answer a readiness query. Docker Compose provisions PostgreSQL and waits
-for its health check before starting the backend. Production requires a managed
-PostgreSQL URL and should use the provider's TLS connection option when available.
+Password hashes and signed short-lived tokens protect identity routes. Request schemas cap SMS text and imported transaction counts/field sizes. Basic process-local rate limits protect expensive/auth endpoints, and WebSockets check browser origin and configured connection capacity. Those limits reset on restart and are not shared by replicas; put a durable limiter and connection controls at the edge for multi-instance deployments. Never load untrusted pickle files; the legacy ML helper uses Python pickle and must only ever receive trusted, integrity-checked artifacts. JWTs currently reach the frontend in a JavaScript-readable cookie, which remains an XSS token-theft risk.
 
 ## Verification
 
-Syntax check without writing `__pycache__`:
-
-```powershell
-python -B -c "import ast, pathlib; ast.parse(pathlib.Path('main.py').read_text(encoding='utf-8'))"
-```
-
-Parser smoke test:
-
-```powershell
-python -B -c "import json; from main import parse_sms_batch; rows, failures = parse_sms_batch('Rs.1200 debited at Swiggy\nINR 540 paid to Uber\nYour account has been debited by Rs 15000 at Reliance Digital'); print(json.dumps({'rows': rows, 'failures': failures}, ensure_ascii=True))"
-```
-
-Route check:
-
-```powershell
-Invoke-RestMethod -Uri http://127.0.0.1:8001/openapi.json | Select-Object -ExpandProperty paths
-```
-
-## Common Problems
-
-### `/api/parse-sms` returns 404
-
-The frontend is talking to an old backend process. Confirm the live route table:
-
-```powershell
-Invoke-RestMethod -Uri http://127.0.0.1:8001/openapi.json | Select-Object -ExpandProperty paths
-```
-
-If `/api/parse-sms` is missing, restart the backend from this folder or run the updated backend on `8002`.
-
-### Port 8001 is already in use
-
-Run on `8002`:
-
-```powershell
-$env:API_PORT = "8002"
-python -B main.py
-```
-
-### Database values do not update after SMS import
-
-Check that you are importing selected rows, not only parsing them. Parsing is review-only; import writes rows into `Transaction`.
-
-### Credit SMS messages are skipped
-
-This is intentional. The current analytics model treats `Transaction` as expense storage. Credits need a separate income/cashflow model before they should affect spending analytics.
+Run `python -m pytest -q tests/test_security_hardening.py` from this directory. A successful unit run does not replace dependency scanning, integration tests against the deployment database, or external security review.

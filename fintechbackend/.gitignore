@@ -33,7 +33,8 @@ htmlcov/
 .pytest_cache/
 
 # Environments
-.env
+.env*
+!.env.example
 .venv
 env/
 venv/

@@ -28,6 +28,7 @@ import uvicorn
 from auth import hash_password, verify_password, create_access_token
 from security import get_current_user, require_roles
 from config import settings
+from rate_limit import rate_limiter
 import json
 
 logger = logging.getLogger(__name__)
@@ -282,18 +283,19 @@ class ParseSMSInput(BaseModel):
     use_gemini: bool = False
 
 class ParsedSMSTransaction(BaseModel):
-    merchant: str
-    amount: float
-    category: str
-    date: str
-    transaction_type: str = "Debit"
-    source_text: Optional[str] = None
+    merchant: str = Field(min_length=1, max_length=200)
+    amount: float = Field(ge=0, le=1_000_000_000)
+    category: str = Field(min_length=1, max_length=100)
+    date: str = Field(min_length=1, max_length=40)
+    transaction_type: str = Field(default="Debit", max_length=20)
+    source_text: Optional[str] = Field(default=None, max_length=10_000)
 
 class ImportSMSTransactionsInput(BaseModel):
-    transactions: list[ParsedSMSTransaction]
+    transactions: list[ParsedSMSTransaction] = Field(min_length=1, max_length=500)
 
 @app.post("/auth/signup", responses={400: {"description": "Identity already exists"}})
-async def signup(user_data: AuthInput, session: Annotated[Session, Depends(get_session)]):
+async def signup(request: Request, user_data: AuthInput, session: Annotated[Session, Depends(get_session)]):
+    rate_limiter.check(request, "signup", limit=5, window_seconds=60)
     if len(user_data.password) < 12:
         raise HTTPException(
             status_code=422, detail="Password must be at least 12 characters."
@@ -328,7 +330,8 @@ async def signup(user_data: AuthInput, session: Annotated[Session, Depends(get_s
     return {"status": "Identity Created"}
 
 @app.post("/auth/login", responses={401: {"description": "Invalid credentials"}})
-async def login(user_data: AuthInput, session: Annotated[Session, Depends(get_session)]):
+async def login(request: Request, user_data: AuthInput, session: Annotated[Session, Depends(get_session)]):
+    rate_limiter.check(request, "login", limit=10, window_seconds=60)
     query = select(User)
     if user_data.email and user_data.username:
         query = query.where(or_(User.email == user_data.email, User.username == user_data.username))
@@ -350,8 +353,9 @@ async def login(user_data: AuthInput, session: Annotated[Session, Depends(get_se
 
 # --- Google OAuth 2.0 endpoints ---
 @app.get("/auth/google/login")
-def google_login():
+def google_login(request: Request):
     """Redirect to Google's OAuth 2.0 consent screen."""
+    rate_limiter.check(request, "google-login", limit=10, window_seconds=60)
     if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET:
         raise HTTPException(
             status_code=500,
@@ -763,10 +767,12 @@ def get_master_summary(user: Annotated[User, Depends(get_current_user)], session
 
 @app.post("/simulate/trajectory")
 async def simulate_trajectory(data: SimulationInput, user: Annotated[User, Depends(get_current_user)]):
-    exit_date, years_to_go, _ = calculate_freedom_projection(user, boost=data.boost_amount)
+    _, baseline_years, _ = calculate_freedom_projection(user)
+    exit_date, years_remaining, _ = calculate_freedom_projection(user, boost=data.boost_amount)
     return {
         "new_exit_date": exit_date,
-        "years_saved": years_to_go,
+        "years_saved": round(baseline_years - years_remaining, 1),
+        "years_remaining": years_remaining,
         "boost": data.boost_amount
     }
 
@@ -817,16 +823,6 @@ async def stress_test_scenario(
 @app.get("/analytics/transactions")
 def get_transaction_analytics(user: Annotated[User, Depends(get_current_user)], session: Annotated[Session, Depends(get_session)]):
     db_transactions = session.exec(select(Transaction).where(Transaction.user_id == user.id)).all()
-    
-    if not db_transactions:
-        mock_history = [
-            {"merchant": "Swiggy Pulse", "amount": 1240.00, "category": CATEGORY_FOOD_DINING, "timestamp": "2026-05-20T14:22:00"},
-            {"merchant": "AWS Cloud Drag", "amount": 3450.00, "category": CATEGORY_BILLS_UTILITIES, "timestamp": "2026-05-18T09:11:00"},
-            {"merchant": "Zara Velocity", "amount": 5600.00, "category": CATEGORY_SHOPPING, "timestamp": "2026-05-15T19:45:00"},
-            {"merchant": "Uber Propulsion", "amount": 820.00, "category": CATEGORY_TRANSPORT_FUEL, "timestamp": "2026-05-12T08:30:00"}
-        ]
-        total_volume = sum(item["amount"] for item in mock_history)
-        return {"total_volume": total_volume, "history": mock_history}
 
     total_volume = sum(t.amount for t in db_transactions)
     return {
@@ -1258,8 +1254,10 @@ def extract_sms_metadata(text: str):
 @app.post("/api/parse-sms")
 async def parse_sms_transactions(
     data: ParseSMSInput,
+    request: Request,
     user: Annotated[User, Depends(get_current_user)]
 ):
+    rate_limiter.check(request, "sms-parse", limit=10, window_seconds=60)
     raw_sms = data.raw_sms.strip()
     if not raw_sms:
         raise HTTPException(status_code=400, detail="Paste your banking SMS history before parsing.")
@@ -1514,10 +1512,12 @@ async def generate_autonomous_plan(data: PlanInput, user: Annotated[User, Depend
 @app.post(API_PREFIX + "/telemetry/sms-webhook", responses={403: {"description": "Invalid webhook token or secret"}, 400: {"description": "Invalid SMS crawl data"}, 404: {"description": "Target user not found"}})
 async def sms_webhook_ingestion(
     data: SMSWebhookInput,
+    request: Request,
     x_vaultic_token: Annotated[str | None, Header()] = None,
     session: Annotated[Session, Depends(get_session)] = None
 ):
     """Ingest an SMS transaction only for the explicitly selected user."""
+    rate_limiter.check(request, "sms-webhook", limit=60, window_seconds=60)
     webhook_secret = settings.VAULTIC_WEBHOOK_SECRET
     if not webhook_secret:
         raise HTTPException(status_code=503, detail="SMS webhook is not configured.")

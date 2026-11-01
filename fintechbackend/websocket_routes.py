@@ -9,6 +9,7 @@ from sqlmodel import Session
 from database_new import get_session
 from security import get_user_from_token_ws
 from websocket_manager import manager
+from config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ws", tags=["websocket"])
@@ -20,6 +21,12 @@ async def websocket_telemetry_endpoint(
     session: Session = Depends(get_session),
 ):
     """Authenticate with a JWT subprotocol and derive the stream owner from it."""
+    origin = websocket.headers.get("origin")
+    if origin and origin.rstrip("/") not in settings.cors_origins:
+        await websocket.close(
+            code=status.WS_1008_POLICY_VIOLATION, reason="Origin not allowed"
+        )
+        return
     auth_protocol = next(
         (
             protocol
@@ -57,6 +64,11 @@ async def websocket_telemetry_endpoint(
         return
 
     user_id = user.id
+    if manager.get_connection_count() >= settings.WEBSOCKET_MAX_CONNECTIONS:
+        await websocket.close(
+            code=status.WS_1013_TRY_AGAIN_LATER, reason="Connection capacity reached"
+        )
+        return
     await manager.connect(user_id, websocket, subprotocol="vaultic.telemetry")
 
     try:

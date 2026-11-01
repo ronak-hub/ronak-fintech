@@ -57,7 +57,7 @@ class ConnectionManager:
         dead_connections = set()
         message_json = json.dumps(message)
         
-        for websocket in self.active_connections[user_id]:
+        for websocket in tuple(self.active_connections.get(user_id, ())):
             try:
                 await websocket.send_text(message_json)
             except RuntimeError as e:
@@ -76,9 +76,9 @@ class ConnectionManager:
         message_json = json.dumps(message)
         dead_connections = {}
         
-        for user_id, connections in self.active_connections.items():
+        for user_id, connections in tuple(self.active_connections.items()):
             dead_set = set()
-            for websocket in connections:
+            for websocket in tuple(connections):
                 try:
                     await websocket.send_text(message_json)
                 except Exception as e:
@@ -95,7 +95,7 @@ class ConnectionManager:
     
     def get_connection_count(self, user_id: int = None) -> int:
         """Get total connected clients (optionally for a specific user)."""
-        if user_id:
+        if user_id is not None:
             return len(self.active_connections.get(user_id, set()))
         return sum(len(conns) for conns in self.active_connections.values())
     

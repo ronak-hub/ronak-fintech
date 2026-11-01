@@ -2,7 +2,7 @@ from typing import Annotated, Optional
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import jwt, JWTError
+import jwt
 from sqlmodel import select
 from sqlalchemy import or_
 from database_new import get_session
@@ -20,9 +20,10 @@ def decode_token(token: str) -> dict:
             SECRET_KEY,
             algorithms=[ALGORITHM],
             issuer=TOKEN_ISSUER,
+            options={"require": ["exp", "iss", "sub"]},
         )
         return payload
-    except JWTError:
+    except jwt.InvalidTokenError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",

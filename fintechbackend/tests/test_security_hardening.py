@@ -3,8 +3,10 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
+from starlette.requests import Request
 from starlette.websockets import WebSocketDisconnect
 
 TEST_DATABASE = Path(tempfile.gettempdir()) / f"vaultic-hardening-{os.getpid()}.sqlite3"
@@ -21,6 +23,7 @@ from auth import hash_password
 from config import Settings
 from database_new import engine
 from models import Transaction, User
+from rate_limit import ProcessRateLimiter
 
 
 @pytest.fixture(scope="module")
@@ -58,6 +61,7 @@ def test_protected_endpoint_rejects_missing_and_invalid_tokens(client):
 def test_production_settings_reject_sqlite_and_wildcard_cors():
     settings = Settings(
         ENVIRONMENT="production",
+        DEBUG_MODE=False,
         DATABASE_URL="sqlite:///./vaultic.db",
         SECRET_KEY="test-signing-secret-with-more-than-32-characters",
         CORS_ORIGINS="https://vaultic.example",
@@ -68,6 +72,7 @@ def test_production_settings_reject_sqlite_and_wildcard_cors():
 
     wildcard_settings = Settings(
         ENVIRONMENT="production",
+        DEBUG_MODE=False,
         DATABASE_URL="postgresql://user:pass@db.example/vaultic",
         SECRET_KEY="test-signing-secret-with-more-than-32-characters",
         CORS_ORIGINS="*",
@@ -172,3 +177,25 @@ def test_websocket_authenticates_identity_without_url_token(client, test_user):
     with pytest.raises(WebSocketDisconnect):
         with client.websocket_connect("/api/v1/ws/telemetry"):
             pass
+
+
+def test_sensitive_route_rate_limiter_returns_retry_after():
+    limiter = ProcessRateLimiter()
+    request = Request({"type": "http", "client": ("127.0.0.1", 12345)})
+    limiter.check(request, "login", limit=1, window_seconds=60)
+    with pytest.raises(Exception) as error:
+        limiter.check(request, "login", limit=1, window_seconds=60)
+    assert getattr(error.value, "status_code", None) == 429
+    assert error.value.headers["Retry-After"] == "60"
+
+
+def test_sms_import_rejects_oversized_batches(client, test_user):
+    token = create_access_token(
+        {"sub": test_user.username, "user_id": test_user.id, "role": test_user.role}
+    )
+    response = client.post(
+        "/api/import-sms-transactions",
+        json={"transactions": [{"merchant": "shop", "amount": 10, "category": "food", "date": "today"}] * 501},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 422

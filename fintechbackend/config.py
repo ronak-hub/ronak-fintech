@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = ""
     VAULTIC_SECRET_KEY: str = ""
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     VAULTIC_WEBHOOK_SECRET: str = ""
 
     CORS_ORIGINS: str = (
@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = "http://127.0.0.1:8001/auth/google/callback"
-    GOOGLE_USE_SYSTEM_PROXY: bool = True
+    GOOGLE_USE_SYSTEM_PROXY: bool = False
     FRONTEND_BASE_URL: str = "http://localhost:3000"
 
     LOG_LEVEL: str = "INFO"
@@ -127,6 +127,12 @@ class Settings(BaseSettings):
 
         _ = self.signing_secret
         _ = self.cors_origins
+        if self.DEBUG_MODE:
+            raise RuntimeError("DEBUG_MODE must be false in production.")
+        if self.ALGORITHM != "HS256":
+            raise RuntimeError("Production JWT signing must use HS256.")
+        if not 1 <= self.ACCESS_TOKEN_EXPIRE_MINUTES <= 1440:
+            raise RuntimeError("ACCESS_TOKEN_EXPIRE_MINUTES must be between 1 and 1440.")
         database_url = self.DATABASE_URL.lower()
         if not database_url.startswith(
             ("postgres://", "postgresql://", "postgresql+psycopg2://")
@@ -140,6 +146,9 @@ class Settings(BaseSettings):
             _ = frontend.port
         except ValueError as error:
             raise RuntimeError("FRONTEND_BASE_URL must be a valid HTTPS origin.") from error
+        frontend_origin = f"{frontend.scheme}://{frontend.netloc}".rstrip("/")
+        if frontend_origin not in self.cors_origins:
+            raise RuntimeError("FRONTEND_BASE_URL must be included in CORS_ORIGINS.")
 
         if self.VAULTIC_WEBHOOK_SECRET and len(self.VAULTIC_WEBHOOK_SECRET) < 32:
             raise RuntimeError("VAULTIC_WEBHOOK_SECRET must be at least 32 characters.")
